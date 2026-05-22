@@ -168,15 +168,24 @@ def chat():
     })
 
 
-# ── 管理后台（密码保护）──────────────────────
+# ── 管理后台（Session密码保护）────────────────
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "hygas0826")
 
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "POST":
+        pwd = request.form.get("password", "")
+        if pwd == ADMIN_PASSWORD:
+            from flask import session
+            session["admin"] = True
+            return redirect("/admin")
+        return render_template("admin_login.html", error="密码错误")
+    return render_template("admin_login.html", error="")
+
 def _require_auth():
-    import base64
-    auth = request.headers.get("Authorization", "")
-    expected = "Basic " + base64.b64encode(f"admin:{ADMIN_PASSWORD}".encode()).decode()
-    if auth != expected:
-        return jsonify({"error": "请输入管理密码"}), 401
+    from flask import session
+    if not session.get("admin"):
+        return redirect("/admin/login")
     return None
 
 @app.route("/admin")
@@ -223,7 +232,6 @@ def admin():
 def admin_reload():
     auth_err = _require_auth()
     if auth_err: return auth_err
-    """热更新知识库"""
     try:
         kb.reload()
         return jsonify({"status": "ok", "message": "知识库已重新加载"})
@@ -233,6 +241,8 @@ def admin_reload():
 
 @app.route("/admin/upload", methods=["POST"])
 def admin_upload():
+    auth_err = _require_auth()
+    if auth_err: return auth_err
     """上传Excel更新知识库"""
     from config import KB_FAQ_PATH
     file = request.files.get("file")

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <title>管理后台登录</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, sans-serif; background: #1a1a2e; color: #eee; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+        .box { background: #16213e; border-radius: 16px; padding: 40px 32px; width: 100%; max-width: 360px; text-align: center; }
+        h1 { font-size: 20px; color: #19c37d; margin-bottom: 8px; }
+        p { font-size: 13px; color: #888; margin-bottom: 24px; }
+        input { width: 100%; padding: 14px; border: 1px solid #2a2a4a; border-radius: 10px; background: #0f0f23; color: #fff; font-size: 16px; text-align: center; outline: none; }
+        input:focus { border-color: #19c37d; }
+        button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 10px; background: #19c37d; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; }
+        button:active { opacity: 0.8; }
+        .err { color: #dc2626; font-size: 13px; margin-top: 8px; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>衡阳燃气 AI 客服</h1>
+        <p>管理后台登录</p>
+        <form method="POST">
+            <input type="password" name="password" placeholder="请输入管理密码" autofocus>
+            <button type="submit">登录</button>
+        </form>
+        {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    </div>
+</body>
+</html>
