@@ -3,7 +3,7 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ── DeepSeek API ──────────────────────────────────
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-3c51dda8a824473baa0b846df51fba40")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_MODEL = "deepseek-chat"
 ENABLE_AI_FALLBACK = True
