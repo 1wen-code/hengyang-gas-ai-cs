@@ -85,7 +85,13 @@
         messageInput.addEventListener("input", function() { autoResizeInput(); });
         newChatBtn.addEventListener("click", startNewChat);
         toggleSidebar.addEventListener("click", function () {
-            sidebar.classList.toggle("collapsed");
+            if (window.innerWidth <= 768) {
+                // 手机端：滑出侧边栏
+                sidebar.classList.toggle("mobile-open");
+                toggleOverlay();
+            } else {
+                sidebar.classList.toggle("collapsed");
+            }
         });
         document.querySelectorAll(".suggestion-btn").forEach(function (btn) {
             btn.addEventListener("click", function () {
@@ -625,6 +631,29 @@
         addDemoButton();
     }
     setTimeout(initExtensions, 500);
+
+    // ── 手机侧边栏遮罩 ────────────────────────────
+    var overlay = null;
+    function getOverlay() {
+        if (!overlay) {
+            overlay = document.createElement("div");
+            overlay.className = "sidebar-overlay";
+            overlay.addEventListener("click", function() {
+                sidebar.classList.remove("mobile-open");
+                overlay.classList.remove("show");
+            });
+            document.body.appendChild(overlay);
+        }
+        return overlay;
+    }
+    function toggleOverlay() {
+        var ol = getOverlay();
+        if (sidebar.classList.contains("mobile-open")) {
+            ol.classList.add("show");
+        } else {
+            ol.classList.remove("show");
+        }
+    }
 
     // ── 启动 ───────────────────────────────────────
     init();
