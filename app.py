@@ -132,27 +132,6 @@ def chat():
             "category": "智能欢迎 > 身份介绍",
         })
 
-    if intent == "refund":
-        return jsonify({
-            "reply": REFUND_REPLY,
-            "source": "refund",
-            "category": "气费管理 > 退款申请",
-        })
-
-    if intent == "transfer":
-        return jsonify({
-            "reply": TRANSFER_REPLY,
-            "source": "transfer",
-            "category": "转人工 > 用户要求",
-        })
-
-    if intent == "vague_business":
-        return jsonify({
-            "reply": BUSINESS_GUIDE_REPLY,
-            "source": "guide",
-            "category": "业务引导 > 模糊咨询",
-        })
-
     if intent == "irrelevant":
         return jsonify({
             "reply": REJECT_REPLY,
@@ -160,7 +139,7 @@ def chat():
             "category": "转人工 > 超出范围",
         })
 
-    # ── Step 2: FAQ 精确匹配 ──────────────────
+    # ── Step 2: FAQ 精确匹配（优先于模糊意图）──
     faq_result = kb.search_faq(question)
     if faq_result:
         return jsonify({
@@ -186,10 +165,32 @@ def chat():
             "law_code": policy_result.get("law_code", ""),
         })
 
-    # ── Step 4: RAG + DeepSeek 兜底（多轮对话） ─
+    # ── Step 4: 业务意图（FAQ未命中时才触发）──
+    if intent == "refund":
+        return jsonify({
+            "reply": REFUND_REPLY,
+            "source": "refund",
+            "category": "气费管理 > 退款申请",
+        })
+
+    if intent == "transfer":
+        return jsonify({
+            "reply": TRANSFER_REPLY,
+            "source": "transfer",
+            "category": "转人工 > 用户要求",
+        })
+
+    if intent == "vague_business":
+        return jsonify({
+            "reply": BUSINESS_GUIDE_REPLY,
+            "source": "guide",
+            "category": "业务引导 > 模糊咨询",
+        })
+
+    # ── Step 5: RAG + DeepSeek 兜底（多轮对话） ─
     if ai:
         history = data.get("history", [])
-        top_k = kb.search_top_k(question, k=8)  # 扩大到8条
+        top_k = kb.search_top_k(question, k=8)
         ai_reply = ai.ask_with_rag(question, top_k, history)
         if ai_reply:
             return jsonify({
@@ -199,7 +200,7 @@ def chat():
                 "rag_count": len(top_k),
             })
 
-    # ── Step 5: 业务引导兜底（无AI时） ────────────
+    # ── Step 6: 业务引导兜底 ───────────────────
     return jsonify({
         "reply": BUSINESS_GUIDE_REPLY,
         "source": "guide",
