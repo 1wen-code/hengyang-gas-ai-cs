@@ -146,11 +146,9 @@ class KnowledgeService:
                 }
         if best and best_score >= MATCH_THRESHOLD:
             ans = best["answer"]
-            bad = ["建议您联系衡阳天然气", "如需了解更多详情", "关于您咨询的",
-                   "建议联系衡阳天然气公司获取专业", "请联系衡阳天然气客服热线获取"]
-            for bp in bad:
-                if bp in ans:
-                    return None
+            # 拒绝模板短回答：<80字且含"客服热线"或"建议"的
+            if len(ans) < 80 and ("客服热线" in ans or "建议您" in ans):
+                return None
             return best
         return None
 
