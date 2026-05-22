@@ -1,12 +1,14 @@
 import os
+from dotenv import load_dotenv
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 # ── DeepSeek API ──────────────────────────────────
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_MODEL = "deepseek-chat"
-ENABLE_AI_FALLBACK = True
+ENABLE_AI_FALLBACK = bool(DEEPSEEK_API_KEY)  # 无Key时自动禁用AI
 
 # ── 知识库路径 ──────────────────────────────────
 KB_FAQ_PATH = os.path.join(BASE_DIR, "knowledge", "faq", "faq_knowledge.csv")
