@@ -8,7 +8,7 @@ from services.knowledge_service import KnowledgeService
 from services.ai_service import (
     AIService, IntentDetector,
     REJECT_REPLY, GREETING_REPLY, IDENTITY_REPLY, BUSINESS_GUIDE_REPLY,
-    REFUND_REPLY, EMOTION_REPLY, CRISIS_REPLY, COMPLAINT_REPLY,
+    REFUND_REPLY, EMOTION_REPLY, EMOTION_LIGHT_REPLY, CRISIS_REPLY, COMPLAINT_REPLY,
 )
 from services.emergency import detect_emergency, generate_ticket, log_emergency
 import os, csv, pandas as pd
@@ -88,6 +88,20 @@ def chat():
             "reply": CRISIS_REPLY,
             "source": "crisis",
             "category": "紧急干预 > 心理安抚",
+        })
+
+    if intent == "abuse":
+        return jsonify({
+            "reply": EMOTION_LIGHT_REPLY,
+            "source": "emotion",
+            "category": "情绪安抚 > 轻度引导",
+        })
+
+    if intent == "nonsense":
+        return jsonify({
+            "reply": "您好，请问您遇到了什么燃气问题？我可以帮您查询或办理相关业务。",
+            "source": "guide",
+            "category": "业务引导 > 无意义输入",
         })
 
     if intent == "emotion":

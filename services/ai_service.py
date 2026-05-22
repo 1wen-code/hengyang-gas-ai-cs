@@ -70,9 +70,17 @@ REFUND_REPLY = """您好，燃气业务退款需根据办理类型审核。
 客服将在 **1-3 个工作日**内审核并联系您。您也可直接拨打客服热线 **0734-8677777** 加急处理。"""
 
 # ── 情绪安抚模板 ──────────────────────────────
-EMOTION_REPLY = """非常抱歉给您带来不好的体验，我理解您的心情。
+EMOTION_REPLY = """很抱歉让您有不好的体验。如果您遇到了燃气问题，可以告诉我具体情况，我会尽力帮助您处理。"""
 
-请告诉我具体遇到了什么问题，我会尽力帮助您处理。如果是紧急情况，您也可以直接拨打24小时客服热线 **0734-8677777**。"""
+EMOTION_LIGHT_REPLY = """您好，请问您遇到了什么燃气问题？我可以帮您查询或办理相关业务。"""
+
+CHITCHAT_REPLIES = {
+    "哈哈": "您好，有什么可以帮您的吗？",
+    "呵呵": "您好，请问需要办理什么燃气业务？",
+    "在吗": "在的，请问有什么可以帮您？",
+    "今天天气": "天气不错！请问有什么燃气方面的问题需要咨询？",
+    "你是谁": IDENTITY_REPLY,
+}
 
 # ── 危机干预模板 ──────────────────────────────
 CRISIS_REPLY = """我注意到您现在情绪非常低落。
@@ -170,11 +178,21 @@ class IntentDetector:
         r"(家里|我家|厨房).*(没.*气|没.*火|用不了.*气)",
     ]
 
+    ABUSE_PATTERNS = [
+        r"神经病", r"有病", r"你.*病",
+        r"傻逼", r"傻叉", r"脑残", r"智障", r"sb",
+        r"操", r"艹", r"靠",
+    ]
+
+    NONSENSE_PATTERNS = [
+        r"^[啊哈嘻嘿嗯哦]+$", r"^[?？!！.。]+$",
+        r"^\d{1,4}$", r"^[a-zA-Z]{1,4}$",
+        r"^\.{2,}$", r"^[~～]+$",
+    ]
+
     EMOTION_PATTERNS = [
-        r"垃圾",
-        r"(什么|太|真|很|好).*(差|烂|恶心|坑|骗)",
+        r"垃圾", r"(什么|太|真|很|好).*(差|烂|恶心|坑|骗)",
         r"(气死|气疯|气炸|恼火|愤怒|生气|火大)",
-        r"(骂|操|靠|艹|sb|傻逼|傻叉|脑残|智障)",
         r"(投诉|举报).*(态度|服务|工作)",
         r"(没人管|不理|不回复|敷衍|踢皮球|推卸)",
         r"(等了|拖了).*(多久|好久|几天|几个月)",
@@ -222,7 +240,12 @@ class IntentDetector:
             if re.search(p, q):
                 return "crisis"
 
-        # 0.5 投诉（必须在情绪之前，避免"我要投诉"被情绪拦截）
+        # 0.3 攻击性语言 — 不争吵，轻度安抚
+        for p in cls.ABUSE_PATTERNS:
+            if re.search(p, q):
+                return "abuse"
+
+        # 0.5 投诉
         for p in cls.COMPLAINT_PATTERNS:
             if re.search(p, q):
                 return "complaint"
@@ -232,7 +255,12 @@ class IntentDetector:
             if re.search(p, q):
                 return "emotion"
 
-        # 1. 问候
+        # 1. 无意义输入
+        for p in cls.NONSENSE_PATTERNS:
+            if re.match(p, q):
+                return "nonsense"
+
+        # 1.2 闲聊/问候
         for p in cls.GREETING_PATTERNS:
             if re.match(p, q):
                 return "greeting"
