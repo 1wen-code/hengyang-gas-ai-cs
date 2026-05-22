@@ -8,6 +8,7 @@ from services.knowledge_service import KnowledgeService
 from services.ai_service import (
     AIService, IntentDetector,
     REJECT_REPLY, GREETING_REPLY, IDENTITY_REPLY, BUSINESS_GUIDE_REPLY,
+    REFUND_REPLY,
 )
 from services.emergency import detect_emergency, generate_ticket, log_emergency
 import os, csv, pandas as pd
@@ -89,6 +90,13 @@ def chat():
             "reply": IDENTITY_REPLY,
             "source": "identity",
             "category": "智能欢迎 > 身份介绍",
+        })
+
+    if intent == "refund":
+        return jsonify({
+            "reply": REFUND_REPLY,
+            "source": "refund",
+            "category": "气费管理 > 退款申请",
         })
 
     if intent == "transfer":
