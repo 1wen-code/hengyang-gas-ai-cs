@@ -302,8 +302,8 @@ class IntentDetector:
             if kw in q:
                 return "gas_related"
 
-        # 8. 默认：短输入可能是模糊咨询，长输入可能是无关
-        if len(q) <= 5:
+        # 8. 默认：短输入可能是闲聊/模糊咨询；明显长无关才拒绝
+        if len(q) <= 15:
             return "vague_business"
         return "irrelevant"
 
