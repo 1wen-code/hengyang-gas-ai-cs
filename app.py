@@ -8,7 +8,7 @@ from services.knowledge_service import KnowledgeService
 from services.ai_service import (
     AIService, IntentDetector,
     REJECT_REPLY, GREETING_REPLY, IDENTITY_REPLY, BUSINESS_GUIDE_REPLY,
-    REFUND_REPLY,
+    REFUND_REPLY, EMOTION_REPLY, CRISIS_REPLY, COMPLAINT_REPLY,
 )
 from services.emergency import detect_emergency, generate_ticket, log_emergency
 import os, csv, pandas as pd
@@ -82,6 +82,27 @@ def chat():
 
     # ── Step 1: 意图识别 ──────────────────────
     intent = IntentDetector.detect(question)
+
+    if intent == "crisis":
+        return jsonify({
+            "reply": CRISIS_REPLY,
+            "source": "crisis",
+            "category": "紧急干预 > 心理安抚",
+        })
+
+    if intent == "emotion":
+        return jsonify({
+            "reply": EMOTION_REPLY,
+            "source": "emotion",
+            "category": "情绪安抚 > 用户情绪疏导",
+        })
+
+    if intent == "complaint":
+        return jsonify({
+            "reply": COMPLAINT_REPLY,
+            "source": "complaint",
+            "category": "投诉建议 > 投诉受理",
+        })
 
     if intent == "greeting":
         return jsonify({

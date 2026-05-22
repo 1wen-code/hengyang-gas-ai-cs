@@ -31,6 +31,9 @@
         greeting: "智能欢迎",
         identity: "身份介绍",
         guide: "业务引导",
+        crisis: "心理安抚",
+        emotion: "情绪安抚",
+        complaint: "投诉受理",
         error: "系统错误",
     };
 
