@@ -2,7 +2,7 @@
 衡阳市天然气AI客服智能体 — 主应用
 流程：紧急检测 → 意图识别 → FAQ匹配 → 法规匹配 → RAG+DeepSeek → 业务引导 → 转人工
 """
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect
 from config import SECRET_KEY, DEBUG, ENABLE_AI_FALLBACK
 from services.knowledge_service import KnowledgeService
 from services.ai_service import (
@@ -176,23 +176,23 @@ def admin_login():
     if request.method == "POST":
         pwd = request.form.get("password", "")
         if pwd == ADMIN_PASSWORD:
-            from flask import session
             session["admin"] = True
             return redirect("/admin")
         return render_template("admin_login.html", error="密码错误")
     return render_template("admin_login.html", error="")
 
-def _require_auth():
-    from flask import session
-    if not session.get("admin"):
-        return redirect("/admin/login")
-    return None
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("admin", None)
+    return redirect("/admin/login")
+
+def _check_admin():
+    return session.get("admin", False)
 
 @app.route("/admin")
 def admin():
-    """管理后台页面"""
-    auth_err = _require_auth()
-    if auth_err: return auth_err
+    if not _check_admin():
+        return redirect("/admin/login")
     # 读取统计数据
     from config import KB_FAQ_PATH, KB_POLICY_PATH, TAG_SYSTEM_PATH
     faq_count = 0
@@ -230,8 +230,8 @@ def admin():
 
 @app.route("/admin/reload", methods=["POST"])
 def admin_reload():
-    auth_err = _require_auth()
-    if auth_err: return auth_err
+    if not _check_admin():
+        return jsonify({"error": "未登录"}), 401
     try:
         kb.reload()
         return jsonify({"status": "ok", "message": "知识库已重新加载"})
@@ -241,8 +241,8 @@ def admin_reload():
 
 @app.route("/admin/upload", methods=["POST"])
 def admin_upload():
-    auth_err = _require_auth()
-    if auth_err: return auth_err
+    if not _check_admin():
+        return jsonify({"error": "未登录"}), 401
     """上传Excel更新知识库"""
     from config import KB_FAQ_PATH
     file = request.files.get("file")
@@ -265,8 +265,8 @@ def admin_upload():
 @app.route("/admin/tickets/clear", methods=["POST"])
 def admin_tickets_clear():
     """清除工单记录"""
-    auth_err = _require_auth()
-    if auth_err: return auth_err
+    if not _check_admin():
+        return jsonify({"error": "未登录"}), 401
     try:
         tickets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
         with open(tickets_path, "w", encoding="utf-8-sig") as f:
