@@ -144,6 +144,22 @@ body {
     background: rgba(25, 195, 125, 0.1);
 }
 
+/* 手机端工单入口 */
+.mobile-tickets-link {
+    display: none;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 20px;
+    padding: 8px;
+    margin-left: auto;
+}
+
+@media (max-width: 768px) {
+    .mobile-tickets-link {
+        display: block;
+    }
+}
+
 /* --- 主聊天区域 --- */
 .chat-main {
     flex: 1;
