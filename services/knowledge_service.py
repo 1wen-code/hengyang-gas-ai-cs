@@ -116,6 +116,10 @@ class KnowledgeService:
             intersection = query_tokens & kb_tokens
             union = query_tokens | kb_tokens
             score = len(intersection) / len(union)
+            # 精确率惩罚：用户问题中未匹配到的关键词越多，降权越重
+            precision = len(intersection) / len(query_tokens) if query_tokens else 0
+            if precision < 0.6:
+                score -= 0.12
             # 多词重合加分
             if len(intersection) >= 3:
                 score += 0.08 * (len(intersection) - 2)
@@ -124,7 +128,7 @@ class KnowledgeService:
             # 短问题匹配长答案：降权
             if len(query_tokens) <= 3 and len(kb_tokens) > 8:
                 score -= 0.05
-            # 精确包含加分：用户问题包含在KB问题中（或反之）
+            # 精确包含加分
             if question in kb_q or kb_q in question:
                 score += 0.15
             score = max(0.0, min(score, 1.0))
@@ -141,6 +145,12 @@ class KnowledgeService:
                     "score": round(best_score, 3),
                 }
         if best and best_score >= MATCH_THRESHOLD:
+            ans = best["answer"]
+            bad = ["建议您联系衡阳天然气", "如需了解更多详情", "关于您咨询的",
+                   "建议联系衡阳天然气公司获取专业", "请联系衡阳天然气客服热线获取"]
+            for bp in bad:
+                if bp in ans:
+                    return None
             return best
         return None
 
@@ -192,8 +202,13 @@ class KnowledgeService:
             intersection = query_tokens & kb_tokens
             union = query_tokens | kb_tokens
             score = len(intersection) / len(union)
-            if len(intersection) >= 2:
-                score += 0.05 * (len(intersection) - 1)
+            precision = len(intersection) / len(query_tokens) if query_tokens else 0
+            if precision < 0.6: score -= 0.12
+            if len(intersection) >= 3: score += 0.08 * (len(intersection) - 2)
+            if len(intersection) >= 5: score += 0.10
+            if len(query_tokens) <= 3 and len(kb_tokens) > 8: score -= 0.05
+            if question in kb_q or kb_q in question: score += 0.15
+            score = max(0.0, min(score, 1.0))
             scored.append({
                 "question": kb_q,
                 "answer": row["标准回答"],
