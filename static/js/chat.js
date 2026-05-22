@@ -78,8 +78,9 @@
 
     function bindEvents() {
         sendBtn.addEventListener("click", handleSend);
+        sendBtn.addEventListener("touchend", function(e) { e.preventDefault(); handleSend(); });
         messageInput.addEventListener("keydown", handleKeydown);
-        messageInput.addEventListener("input", autoResizeInput);
+        messageInput.addEventListener("input", function() { autoResizeInput(); updateSendButton(); });
         newChatBtn.addEventListener("click", startNewChat);
         toggleSidebar.addEventListener("click", function () {
             sidebar.classList.toggle("collapsed");
@@ -161,6 +162,11 @@
                 isWaiting = false;
                 updateSendButton();
                 scrollToBottom();
+                // 手机端恢复焦点，确保后续输入能触发按钮更新
+                setTimeout(function() {
+                    messageInput.focus();
+                    messageInput.dispatchEvent(new Event("input"));
+                }, 100);
             });
     }
 
@@ -291,7 +297,7 @@
     }
 
     function updateSendButton() {
-        sendBtn.disabled = isWaiting || !messageInput.value.trim();
+        sendBtn.disabled = isWaiting;  // 只等回复时禁用，不因输入为空禁用
     }
 
     // ── 滚动 ───────────────────────────────────────
