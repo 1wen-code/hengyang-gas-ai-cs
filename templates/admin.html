@@ -58,14 +58,14 @@
     <h2>紧急工单 (最近20条)</h2>
     {% if tickets %}
     <table>
-        <tr><th>工单ID</th><th>时间</th><th>用户问题</th><th>风险等级</th><th>状态</th></tr>
+        <tr><th>工单ID</th><th>时间</th><th>用户问题</th><th>风险等级</th><th>操作</th></tr>
         {% for t in tickets %}
-        <tr>
-            <td>{{ t.get('工单ID', '') }}</td>
+        <tr id="row-{{ t.get('工单ID', '') }}">
+            <td style="font-family:monospace;font-size:11px;">{{ t.get('工单ID', '') }}</td>
             <td>{{ t.get('时间', '') }}</td>
-            <td>{{ t.get('用户问题', '')[:40] }}</td>
+            <td>{{ t.get('用户问题', '')[:30] }}</td>
             <td><span class="tag tag-{{ 'high' if t.get('风险等级') in ('高危','紧急') else 'urgent' }}">{{ t.get('风险等级', '') }}</span></td>
-            <td>{{ t.get('状态', '') }}</td>
+            <td><button class="btn-red" style="padding:4px 10px;font-size:11px;" onclick="deleteTicket('{{ t.get('工单ID', '') }}')">删除</button></td>
         </tr>
         {% endfor %}
     </table>
@@ -92,6 +92,18 @@
                 .then(d=>{
                     document.getElementById("msg").innerHTML = '<span style=color:'+(d.status=="ok"?"#19c37d":"#dc2626")+'">'+d.message+'</span>';
                     if (d.status=="ok") setTimeout(function(){location.reload();}, 1000);
+                });
+        }
+        function deleteTicket(id) {
+            if (!confirm("确定删除工单 " + id + " ？")) return;
+            fetch("/admin/tickets/delete/" + id, {method:"POST"})
+                .then(r=>r.json())
+                .then(d=>{
+                    document.getElementById("msg").innerHTML = '<span style=color:'+(d.status=="ok"?"#19c37d":"#dc2626")+'">'+d.message+'</span>';
+                    if (d.status=="ok") {
+                        var row = document.getElementById("row-" + id);
+                        if (row) row.remove();
+                    }
                 });
         }
         function clearTickets() {

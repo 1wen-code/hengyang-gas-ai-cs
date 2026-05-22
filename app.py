@@ -264,14 +264,34 @@ def admin_upload():
 
 @app.route("/admin/tickets/clear", methods=["POST"])
 def admin_tickets_clear():
-    """清除工单记录"""
+    """清除全部工单"""
     if not _check_admin():
         return jsonify({"error": "未登录"}), 401
     try:
         tickets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
         with open(tickets_path, "w", encoding="utf-8-sig") as f:
             f.write("工单ID,时间,用户问题,风险等级,分类,状态,用户IP\n")
-        return jsonify({"status": "ok", "message": "工单记录已清除"})
+        return jsonify({"status": "ok", "message": "全部工单已清除"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/admin/tickets/delete/<ticket_id>", methods=["POST"])
+def admin_tickets_delete(ticket_id):
+    """删除单条工单"""
+    if not _check_admin():
+        return jsonify({"error": "未登录"}), 401
+    try:
+        tickets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
+        rows = []
+        with open(tickets_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            fieldnames = reader.fieldnames
+            rows = [row for row in reader if row.get("工单ID") != ticket_id]
+        with open(tickets_path, "w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        return jsonify({"status": "ok", "message": f"工单 {ticket_id} 已删除"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
