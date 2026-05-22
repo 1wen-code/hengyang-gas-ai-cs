@@ -49,7 +49,12 @@ def chat():
 
     if emergency["level"] == 3:
         # 高危：红色警报 + 工单 + 日志 + 强制转人工
-        ticket = generate_ticket(question, emergency["risk_label"], client_ip)
+        user_session = session.get("user_id", "")
+        if not user_session:
+            import uuid
+            user_session = uuid.uuid4().hex[:12]
+            session["user_id"] = user_session
+        ticket = generate_ticket(question, emergency["risk_label"], client_ip, user_session)
         log_emergency(question, emergency["risk_label"], client_ip, ticket["工单ID"])
         return jsonify({
             "reply": emergency["reply"],
@@ -275,9 +280,9 @@ def admin_tickets_clear():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route("/admin/tickets/delete/<ticket_id>", methods=["POST"])
-def admin_tickets_delete(ticket_id):
-    """删除单条工单"""
+@app.route("/admin/tickets/resolve/<ticket_id>", methods=["POST"])
+def admin_tickets_resolve(ticket_id):
+    """标记工单为已解决（不删除，用户可见）"""
     if not _check_admin():
         return jsonify({"error": "未登录"}), 401
     try:
@@ -286,14 +291,31 @@ def admin_tickets_delete(ticket_id):
         with open(tickets_path, "r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             fieldnames = reader.fieldnames
-            rows = [row for row in reader if row.get("工单ID") != ticket_id]
+            for row in reader:
+                if row.get("工单ID") == ticket_id:
+                    row["状态"] = "已解决"
+                rows.append(row)
         with open(tickets_path, "w", encoding="utf-8-sig", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(rows)
-        return jsonify({"status": "ok", "message": f"工单 {ticket_id} 已删除"})
+        return jsonify({"status": "ok", "message": f"工单 {ticket_id} 已标记为已解决"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/my-tickets")
+def my_tickets():
+    """用户查看自己的工单"""
+    user_id = session.get("user_id", "")
+    tickets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
+    my = []
+    try:
+        with open(tickets_path, "r", encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                if row.get("用户标识") == user_id:
+                    my.append(row)
+    except: pass
+    return render_template("my_tickets.html", tickets=my)
 
 @app.route("/admin/tickets")
 def admin_tickets():

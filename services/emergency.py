@@ -122,14 +122,15 @@ def detect_emergency(question: str) -> dict:
     return {"level": 1, "is_emergency": False, "risk_label": "普通", "matched": [], "reply": "", "reason": "普通业务问题", "action": "正常回答"}
 
 
-def generate_ticket(question: str, risk_level: str, ip: str = "") -> dict:
+def generate_ticket(question: str, risk_level: str, ip: str = "", user_session: str = "") -> dict:
     """生成紧急工单（仅三级高危）"""
     ticket_id = f"EM-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
     created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     ticket = {
         "工单ID": ticket_id, "时间": created_at,
         "用户问题": question, "风险等级": risk_level,
-        "分类": "紧急事件", "状态": "已转人工", "用户IP": ip,
+        "分类": "紧急事件", "状态": "处理中", "用户IP": ip,
+        "用户标识": user_session,
     }
     os.makedirs(os.path.dirname(TICKETS_PATH), exist_ok=True)
     file_exists = os.path.exists(TICKETS_PATH)
