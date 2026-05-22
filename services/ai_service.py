@@ -254,22 +254,22 @@ class IntentDetector:
             if re.search(p, q):
                 return "emotion"
 
-        # 1. 无意义输入
-        for p in cls.NONSENSE_PATTERNS:
-            if re.match(p, q):
-                return "nonsense"
-
-        # 1.2 闲聊/问候
+        # 1. 闲聊/问候（必须在无意义之前，避免"哈哈"被拦截）
         for p in cls.GREETING_PATTERNS:
             if re.match(p, q):
                 return "greeting"
 
-        # 2. 身份询问
+        # 1.2 身份询问
         for p in cls.IDENTITY_PATTERNS:
             if re.search(p, q):
                 return "identity"
 
-        # 3. 转人工
+        # 1.3 无意义输入
+        for p in cls.NONSENSE_PATTERNS:
+            if re.match(p, q):
+                return "nonsense"
+
+        # 2. 转人工
         for p in cls.TRANSFER_PATTERNS:
             if re.search(p, q):
                 return "transfer"
