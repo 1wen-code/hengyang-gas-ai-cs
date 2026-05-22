@@ -496,7 +496,8 @@ body {
     transform: scale(0.95);
 }
 
-.send-btn:disabled {
+.send-btn:disabled,
+.send-btn.sending {
     opacity: 0.3;
     cursor: not-allowed;
 }

@@ -297,7 +297,11 @@
     }
 
     function updateSendButton() {
-        sendBtn.disabled = isWaiting;  // 只等回复时禁用，不因输入为空禁用
+        if (isWaiting) {
+            sendBtn.classList.add("sending");
+        } else {
+            sendBtn.classList.remove("sending");
+        }
     }
 
     // ── 滚动 ───────────────────────────────────────
