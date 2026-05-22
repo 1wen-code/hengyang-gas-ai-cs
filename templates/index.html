@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>衡阳燃气 AI 客服</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- 侧边栏 -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <button class="new-chat-btn" id="newChatBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                新对话
+            </button>
+        </div>
+        <div class="sidebar-history" id="historyList">
+            <!-- 历史对话列表 -->
+        </div>
+        <div class="sidebar-footer">
+            <div class="sidebar-info">
+                <span class="sidebar-title">衡阳燃气 AI 客服</span>
+                <span class="sidebar-subtitle">基于 DeepSeek 大模型</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 主聊天区域 -->
+    <main class="chat-main">
+        <!-- 顶部栏 -->
+        <header class="chat-header">
+            <button class="toggle-sidebar-btn" id="toggleSidebar" title="切换侧边栏">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                    <line x1="9" y1="3" x2="9" y2="21"></line>
+                </svg>
+            </button>
+            <div class="header-info">
+                <h1 class="header-title">衡阳燃气 AI 客服</h1>
+                <span class="header-status">在线服务中</span>
+            </div>
+        </header>
+
+        <!-- 消息列表 -->
+        <div class="chat-messages" id="chatMessages">
+            <!-- 欢迎消息 -->
+            <div class="welcome-screen" id="welcomeScreen">
+                <div class="welcome-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                        <path d="M2 17l10 5 10-5"></path>
+                        <path d="M2 12l10 5 10-5"></path>
+                    </svg>
+                </div>
+                <h2>衡阳燃气 AI 客服</h2>
+                <p class="welcome-desc">我是您的智能燃气服务助手，可以为您解答燃气相关问题</p>
+                <div class="suggestion-list">
+                    <button class="suggestion-btn" data-msg="如何办理燃气开户？">如何办理燃气开户？</button>
+                    <button class="suggestion-btn" data-msg="燃气开户需要准备哪些材料？">开户需要哪些材料？</button>
+                    <button class="suggestion-btn" data-msg="发现燃气泄漏应该怎么办？">发现燃气泄漏怎么办？</button>
+                    <button class="suggestion-btn" data-msg="衡阳燃气收费标准是什么？">燃气收费标准是什么？</button>
+                    <button class="suggestion-btn" data-msg="燃气表显示Err是什么意思？">燃气表显示Err怎么办？</button>
+                    <button class="suggestion-btn" data-msg="燃气灶打不着火怎么处理？">燃气灶打不着火怎么办？</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 输入区域 -->
+        <div class="chat-input-area">
+            <div class="input-wrapper">
+                <textarea
+                    id="messageInput"
+                    class="message-input"
+                    placeholder="输入您的问题，按 Enter 发送，Shift+Enter 换行"
+                    rows="1"
+                    autofocus
+                ></textarea>
+                <button class="send-btn" id="sendBtn" title="发送消息">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                    </svg>
+                </button>
+            </div>
+            <p class="input-hint">衡阳燃气 AI 客服 · 紧急情况请拨打 24 小时抢修电话：0734-8222222</p>
+        </div>
+    </main>
+
+    <!-- 消息模板 (隐藏) -->
+    <template id="messageTemplate">
+        <div class="message">
+            <div class="message-avatar"></div>
+            <div class="message-body">
+                <div class="message-content"></div>
+                <div class="message-meta"></div>
+            </div>
+        </div>
+    </template>
+
+    <!-- 打字动画模板 (隐藏) -->
+    <template id="typingTemplate">
+        <div class="message bot">
+            <div class="message-avatar bot-avatar">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                    <path d="M2 17l10 5 10-5"></path>
+                    <path d="M2 12l10 5 10-5"></path>
+                </svg>
+            </div>
+            <div class="message-body">
+                <div class="typing-indicator">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+</body>
+</html>

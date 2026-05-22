@@ -1,0 +1,7 @@
+flask>=3.0
+pandas>=2.0
+openpyxl>=3.0
+jieba>=0.42
+openai>=1.0
+python-dotenv>=1.0
+gunicorn>=22.0

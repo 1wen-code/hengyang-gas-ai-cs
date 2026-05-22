@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>衡阳燃气AI客服 - 管理后台</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, sans-serif; background: #1a1a2e; color: #eee; padding: 24px; }
+        h1 { font-size: 22px; margin-bottom: 24px; color: #19c37d; }
+        h2 { font-size: 16px; margin: 20px 0 12px; color: #a78bfa; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .card { background: #16213e; border-radius: 12px; padding: 20px; text-align: center; }
+        .card .num { font-size: 36px; font-weight: 700; color: #19c37d; }
+        .card .label { font-size: 13px; color: #888; margin-top: 4px; }
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+        button, .btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; }
+        .btn-green { background: #19c37d; color: #fff; }
+        .btn-purple { background: #7c3aed; color: #fff; }
+        .btn-red { background: #dc2626; color: #fff; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #2a2a4a; }
+        th { color: #a78bfa; font-weight: 600; }
+        .log { background: #0f0f23; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; color: #a0a0b0; }
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .tag-high { background: rgba(220,38,38,0.2); color: #dc2626; }
+        .tag-urgent { background: rgba(245,158,11,0.2); color: #f59e0b; }
+        .nav { margin-bottom: 20px; }
+        .nav a { color: #888; text-decoration: none; margin-right: 16px; }
+        .nav a:hover { color: #19c37d; }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/">← 返回聊天</a>
+        <span style="color:#444;">|</span>
+        <span style="color:#888;">衡阳燃气AI客服 V2.0</span>
+    </div>
+    <h1>管理后台</h1>
+
+    <div class="grid">
+        <div class="card"><div class="num">{{ faq_count }}</div><div class="label">FAQ知识库条目</div></div>
+        <div class="card"><div class="num">{{ policy_count }}</div><div class="label">法规知识库条目</div></div>
+        <div class="card"><div class="num">{{ tickets|length }}</div><div class="label">紧急工单</div></div>
+        <div class="card"><div class="num">{{ logs|length }}</div><div class="label">日志记录</div></div>
+    </div>
+
+    <div class="actions">
+        <button class="btn-green" onclick="reloadKB()">热更新知识库</button>
+        <form id="uploadForm" style="display:inline;">
+            <input type="file" id="fileInput" accept=".xlsx,.csv" onchange="uploadKB()" style="display:none;">
+            <button type="button" class="btn-purple" onclick="document.getElementById('fileInput').click()">上传Excel更新</button>
+        </form>
+        <button class="btn-red" onclick="clearTickets()">清除工单记录</button>
+    </div>
+    <div id="msg" style="margin:8px 0;font-size:13px;"></div>
+
+    <h2>紧急工单 (最近20条)</h2>
+    {% if tickets %}
+    <table>
+        <tr><th>工单ID</th><th>时间</th><th>用户问题</th><th>风险等级</th><th>状态</th></tr>
+        {% for t in tickets %}
+        <tr>
+            <td>{{ t.get('工单ID', '') }}</td>
+            <td>{{ t.get('时间', '') }}</td>
+            <td>{{ t.get('用户问题', '')[:40] }}</td>
+            <td><span class="tag tag-{{ 'high' if t.get('风险等级') in ('高危','紧急') else 'urgent' }}">{{ t.get('风险等级', '') }}</span></td>
+            <td>{{ t.get('状态', '') }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p style="color:#888;font-size:13px;">暂无紧急工单</p>
+    {% endif %}
+
+    <h2>紧急日志 (最近20条)</h2>
+    <div class="log">{% for l in logs %}{{ l }}{% endfor %}</div>
+
+    <script>
+        function reloadKB() {
+            fetch("/admin/reload", {method:"POST"})
+                .then(r=>r.json())
+                .then(d=>{ document.getElementById("msg").innerHTML = '<span style=color:#19c37d>'+d.message+'</span>'; });
+        }
+        function uploadKB() {
+            var file = document.getElementById("fileInput").files[0];
+            if (!file) return;
+            var form = new FormData();
+            form.append("file", file);
+            fetch("/admin/upload", {method:"POST", body:form})
+                .then(r=>r.json())
+                .then(d=>{
+                    document.getElementById("msg").innerHTML = '<span style=color:'+(d.status=="ok"?"#19c37d":"#dc2626")+'">'+d.message+'</span>';
+                    if (d.status=="ok") setTimeout(function(){location.reload();}, 1000);
+                });
+        }
+        function clearTickets() {
+            if (!confirm("确定清除工单记录？")) return;
+            fetch("/admin/reload", {method:"POST"});
+            document.getElementById("msg").innerHTML = '<span style=color:#f59e0b>请手动删除 logs/tickets.csv 文件</span>';
+        }
+    </script>
+</body>
+</html>

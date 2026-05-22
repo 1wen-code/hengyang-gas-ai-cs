@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+logs/tickets.csv
+logs/emergency.log
+*.xlsx
+*.csv
+!knowledge/faq/faq_knowledge.csv
+!knowledge/policy/policy_knowledge.csv
+.vscode/
+.idea/
