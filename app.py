@@ -2,7 +2,7 @@
 衡阳市天然气AI客服智能体 — 主应用
 流程：紧急检测 → 意图识别 → FAQ匹配 → 法规匹配 → RAG+DeepSeek → 业务引导 → 转人工
 """
-from flask import Flask, render_template, request, jsonify, send_file, redirect
+from flask import Flask, render_template, request, jsonify
 from config import SECRET_KEY, DEBUG, ENABLE_AI_FALLBACK
 from services.knowledge_service import KnowledgeService
 from services.ai_service import (
