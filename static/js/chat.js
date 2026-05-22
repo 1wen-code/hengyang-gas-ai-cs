@@ -453,7 +453,7 @@
     }
 
     // ═══════════════════════════════════════════════
-    // 语音输入 — 占位按钮（功能开发中）
+    // 语音输入 — 高级玻璃按钮（功能预留）
     // ═══════════════════════════════════════════════
     var voiceBtn = null;
 
@@ -462,23 +462,31 @@
 
         voiceBtn = document.createElement("button");
         voiceBtn.id = "voiceBtn";
-        voiceBtn.title = "语音输入 — 功能开发中";
-        voiceBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>';
+        voiceBtn.title = "语音输入";
+        voiceBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>';
 
-        // 点击弹出开发中提示
         voiceBtn.addEventListener("click", function(e) {
             e.preventDefault();
             e.stopPropagation();
-            messageInput.placeholder = "语音功能开发中，当前版本建议使用文字输入。";
-            setTimeout(function() {
-                messageInput.placeholder = "输入您的问题，按 Enter 发送，Shift+Enter 换行";
-            }, 3000);
+            showVoiceToast();
         });
 
         var inputWrapper = document.querySelector(".input-wrapper");
         if (inputWrapper) {
             inputWrapper.insertBefore(voiceBtn, inputWrapper.firstChild);
         }
+    }
+
+    function showVoiceToast() {
+        var old = document.querySelector(".voice-toast");
+        if (old) old.remove();
+
+        var toast = document.createElement("div");
+        toast.className = "voice-toast";
+        toast.innerHTML = '<span style="font-size:18px;margin-right:6px;">🎤</span> 语音功能即将上线，当前版本请使用文字输入';
+        toast.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(22,33,62,0.95);color:#fff;padding:14px 24px;border-radius:30px;font-size:14px;z-index:9999;white-space:nowrap;border:1px solid rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 8px 32px rgba(0,0,0,0.4);animation:voice-toast-in 0.3s ease,voice-toast-out 0.3s ease 2.5s forwards;";
+        document.body.appendChild(toast);
+        setTimeout(function() { toast.remove(); }, 3000);
     }
 
     // ═══════════════════════════════════════════════

@@ -499,7 +499,6 @@ body {
 .send-btn:disabled {
     opacity: 0.3;
     cursor: not-allowed;
-    pointer-events: none;
 }
 
 .input-hint {
@@ -590,27 +589,69 @@ body {
 }
 
 /* ═══════════════════════════════════════════════
-   语音输入按钮 — 占位（功能开发中）
+   语音输入按钮 — 高级玻璃质感
    ═══════════════════════════════════════════════ */
 
 #voiceBtn {
     position: relative;
-    width: 36px;
-    height: 36px;
-    border: none;
+    width: 38px;
+    height: 38px;
+    border: 1.5px solid rgba(255,255,255,0.12);
     border-radius: 50%;
-    background: transparent;
-    color: var(--text-muted);
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: rgba(255,255,255,0.55);
     cursor: pointer;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.3s ease;
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: visible;
+}
+
+#voiceBtn::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(25,195,125,0.3), rgba(99,102,241,0.3), rgba(25,195,125,0.3));
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    z-index: -1;
+    filter: blur(8px);
 }
 
 #voiceBtn:hover {
-    color: var(--accent);
-    background: rgba(25, 195, 125, 0.08);
-    transform: scale(1.1);
+    color: #fff;
+    background: rgba(255,255,255,0.08);
+    border-color: rgba(255,255,255,0.25);
+    transform: scale(1.08);
+    box-shadow: 0 0 20px rgba(25,195,125,0.2);
+}
+
+#voiceBtn:hover::before {
+    opacity: 1;
+}
+
+#voiceBtn:active {
+    transform: scale(0.95);
+}
+
+@media (max-width: 768px) {
+    #voiceBtn {
+        width: 36px;
+        height: 36px;
+    }
+}
+
+/* 语音Toast动画 */
+@keyframes voice-toast-in {
+    from { opacity: 0; transform: translate(-50%,-50%) scale(0.9); }
+    to   { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+}
+@keyframes voice-toast-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
 }
