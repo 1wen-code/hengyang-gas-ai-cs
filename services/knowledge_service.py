@@ -116,9 +116,13 @@ class KnowledgeService:
             intersection = query_tokens & kb_tokens
             union = query_tokens | kb_tokens
             score = len(intersection) / len(union)
-            if len(intersection) >= 2:
-                score += 0.05 * (len(intersection) - 1)
-            score = min(score, 1.0)
+            # 多词重合大幅加分
+            if len(intersection) >= 3:
+                score += 0.10 * (len(intersection) - 2)
+            # 短问题匹配长答案：轻微降权
+            if len(query_tokens) <= 3 and len(kb_tokens) > 8:
+                score -= 0.05
+            score = max(0.0, min(score, 1.0))
             if score > best_score:
                 best_score = score
                 best = {

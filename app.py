@@ -188,9 +188,8 @@ def chat():
 
     # ── Step 4: RAG + DeepSeek 兜底（多轮对话） ─
     if ai:
-        # 获取会话历史
         history = data.get("history", [])
-        top_k = kb.search_top_k(question, k=5)
+        top_k = kb.search_top_k(question, k=8)  # 扩大到8条
         ai_reply = ai.ask_with_rag(question, top_k, history)
         if ai_reply:
             return jsonify({
@@ -200,7 +199,7 @@ def chat():
                 "rag_count": len(top_k),
             })
 
-    # ── Step 5: 业务引导兜底 ───────────────────
+    # ── Step 5: 业务引导兜底（无AI时） ────────────
     return jsonify({
         "reply": BUSINESS_GUIDE_REPLY,
         "source": "guide",
