@@ -155,14 +155,32 @@ body {
     border: none;
     color: var(--text-secondary);
     cursor: pointer;
-    padding: 6px;
+    padding: 8px;
     border-radius: 6px;
+    min-width: 40px;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: color 0.15s, background 0.15s;
+    z-index: 101;
 }
 
 .toggle-sidebar-btn:hover {
     color: var(--text-primary);
     background: rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 768px) {
+    .toggle-sidebar-btn {
+        min-width: 44px;
+        min-height: 44px;
+        flex-shrink: 0;
+    }
+    .toggle-sidebar-btn svg {
+        width: 24px;
+        height: 24px;
+    }
 }
 
 .header-info {
@@ -608,6 +626,12 @@ body {
 
     .quick-replies {
         padding: 6px 8px 6px 14px !important;
+    }
+
+    .toggle-sidebar-btn::after {
+        content: '历史';
+        font-size: 11px;
+        margin-left: 4px;
     }
 }
     }
