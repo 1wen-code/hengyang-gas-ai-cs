@@ -171,7 +171,6 @@ class IntentDetector:
         r"(等了|拖了).*(多久|好久|几天|几个月)",
         r"(崩溃|受不了|忍不了|没法忍)",
         r"(委屈|伤心|失望|寒心|无语)",
-        r"(我要.*投诉|我要.*举报|投诉.*你们)",
     ]
 
     CRISIS_PATTERNS = [
@@ -214,15 +213,15 @@ class IntentDetector:
             if re.search(p, q):
                 return "crisis"
 
-        # 0.5 情绪安抚
-        for p in cls.EMOTION_PATTERNS:
-            if re.search(p, q):
-                return "emotion"
-
-        # 0.8 投诉
+        # 0.5 投诉（必须在情绪之前，避免"我要投诉"被情绪拦截）
         for p in cls.COMPLAINT_PATTERNS:
             if re.search(p, q):
                 return "complaint"
+
+        # 0.8 情绪安抚
+        for p in cls.EMOTION_PATTERNS:
+            if re.search(p, q):
+                return "emotion"
 
         # 1. 问候
         for p in cls.GREETING_PATTERNS:
