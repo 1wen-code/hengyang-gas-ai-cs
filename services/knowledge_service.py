@@ -116,12 +116,17 @@ class KnowledgeService:
             intersection = query_tokens & kb_tokens
             union = query_tokens | kb_tokens
             score = len(intersection) / len(union)
-            # 多词重合大幅加分
+            # 多词重合加分
             if len(intersection) >= 3:
-                score += 0.10 * (len(intersection) - 2)
-            # 短问题匹配长答案：轻微降权
+                score += 0.08 * (len(intersection) - 2)
+            if len(intersection) >= 5:
+                score += 0.10
+            # 短问题匹配长答案：降权
             if len(query_tokens) <= 3 and len(kb_tokens) > 8:
                 score -= 0.05
+            # 精确包含加分：用户问题包含在KB问题中（或反之）
+            if question in kb_q or kb_q in question:
+                score += 0.15
             score = max(0.0, min(score, 1.0))
             if score > best_score:
                 best_score = score

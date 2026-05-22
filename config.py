@@ -17,7 +17,7 @@ TAG_SYSTEM_PATH = os.path.join(BASE_DIR, "knowledge", "labels", "tag_system.json
 KB_TEMPLATE_PATH = os.path.join(BASE_DIR, "knowledge", "knowledge_template.xlsx")
 
 # ── 检索配置 ─────────────────────────────────────
-MATCH_THRESHOLD = 0.30
+MATCH_THRESHOLD = 0.20
 
 # ── Flask ─────────────────────────────────────────
 SECRET_KEY = os.getenv("SECRET_KEY", "hengyang-gas-ai-cs-2024")
