@@ -77,10 +77,12 @@
     }
 
     function bindEvents() {
-        sendBtn.addEventListener("click", handleSend);
-        sendBtn.addEventListener("touchend", function(e) { e.preventDefault(); handleSend(); });
+        sendBtn.addEventListener("click", function(e) {
+            e.preventDefault();
+            handleSend();
+        });
         messageInput.addEventListener("keydown", handleKeydown);
-        messageInput.addEventListener("input", function() { autoResizeInput(); updateSendButton(); });
+        messageInput.addEventListener("input", function() { autoResizeInput(); });
         newChatBtn.addEventListener("click", startNewChat);
         toggleSidebar.addEventListener("click", function () {
             sidebar.classList.toggle("collapsed");
@@ -137,7 +139,7 @@
                     if (data.source === "emergency" || data.source === "warning") {
                         showEmergencyBanner(data.risk_level, data.risk_code, data.ticket_id);
                     }
-                    appendMessage(
+                    var msgDiv = appendMessage(
                         "bot",
                         data.reply,
                         data.source,
@@ -146,6 +148,10 @@
                         data.law_basis,
                         data.rag_count
                     );
+                    // 快捷追问按钮
+                    if (data.source) {
+                        addQuickReplies(data.source, msgDiv);
+                    }
                 }
                 saveMessage("user", text);
                 saveMessage("bot", data.reply, data.source,
@@ -610,27 +616,6 @@
         }
         next();
     }
-
-    // ═══════════════════════════════════════════════
-    // Hooks into existing functions
-    // ═══════════════════════════════════════════════
-    var _origAppendMessage = appendMessage;
-    appendMessage = function(role, content, source, matchQuestion, category, lawBasis, ragCount) {
-        var msgDiv = _origAppendMessage(role, content, source, matchQuestion, category, lawBasis, ragCount);
-        // Add quick replies for bot messages
-        if (role === "bot" && source) {
-            addQuickReplies(source, msgDiv);
-        }
-        // Typewriter effect for bot messages
-        if (role === "bot" && content && source !== "emergency" && content.length > 50) {
-            var contentEl = msgDiv.querySelector(".message-content");
-            if (contentEl) {
-                var origHTML = contentEl.innerHTML;
-                typewriter(contentEl, origHTML, source === "greeting" ? 15 : 10);
-            }
-        }
-        return msgDiv;
-    };
 
     // ── 启动扩展功能 ──────────────────────────────
     function initExtensions() {
