@@ -168,10 +168,22 @@ def chat():
     })
 
 
-# ── 管理后台 ──────────────────────────────────
+# ── 管理后台（密码保护）──────────────────────
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "hygas0826")
+
+def _require_auth():
+    import base64
+    auth = request.headers.get("Authorization", "")
+    expected = "Basic " + base64.b64encode(f"admin:{ADMIN_PASSWORD}".encode()).decode()
+    if auth != expected:
+        return jsonify({"error": "请输入管理密码"}), 401
+    return None
+
 @app.route("/admin")
 def admin():
     """管理后台页面"""
+    auth_err = _require_auth()
+    if auth_err: return auth_err
     # 读取统计数据
     from config import KB_FAQ_PATH, KB_POLICY_PATH, TAG_SYSTEM_PATH
     faq_count = 0
@@ -209,6 +221,8 @@ def admin():
 
 @app.route("/admin/reload", methods=["POST"])
 def admin_reload():
+    auth_err = _require_auth()
+    if auth_err: return auth_err
     """热更新知识库"""
     try:
         kb.reload()
