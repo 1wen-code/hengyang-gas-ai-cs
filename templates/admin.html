@@ -58,14 +58,22 @@
     <h2>紧急工单 (最近20条)</h2>
     {% if tickets %}
     <table>
-        <tr><th>工单ID</th><th>时间</th><th>用户问题</th><th>风险等级</th><th>操作</th></tr>
+        <tr><th>工单ID</th><th>时间</th><th>用户问题</th><th>风险等级</th><th>状态</th><th>操作</th></tr>
         {% for t in tickets %}
-        <tr id="row-{{ t.get('工单ID', '') }}">
+        {% set resolved = t.get('状态') == '已解决' %}
+        <tr id="row-{{ t.get('工单ID', '') }}" style="{{ 'opacity:0.5' if resolved else '' }}">
             <td style="font-family:monospace;font-size:11px;">{{ t.get('工单ID', '') }}</td>
             <td>{{ t.get('时间', '') }}</td>
             <td>{{ t.get('用户问题', '')[:30] }}</td>
             <td><span class="tag tag-{{ 'high' if t.get('风险等级') in ('高危','紧急') else 'urgent' }}">{{ t.get('风险等级', '') }}</span></td>
-            <td><button class="btn-green" style="padding:4px 10px;font-size:11px;" onclick="resolveTicket('{{ t.get('工单ID', '') }}')">标记已解决</button></td>
+            <td><span class="tag {{ 'tag-resolved' if resolved else 'tag-processing' }}">{{ t.get('状态', '处理中') }}</span></td>
+            <td>
+                {% if not resolved %}
+                <button class="btn-green" style="padding:4px 10px;font-size:11px;" onclick="resolveTicket('{{ t.get('工单ID', '') }}')">标记已解决</button>
+                {% else %}
+                <span style="color:#19c37d;font-size:12px;">✓ 已解决</span>
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </table>
