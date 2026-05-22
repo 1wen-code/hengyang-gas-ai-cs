@@ -252,6 +252,19 @@ def admin_upload():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@app.route("/admin/tickets/clear", methods=["POST"])
+def admin_tickets_clear():
+    """清除工单记录"""
+    auth_err = _require_auth()
+    if auth_err: return auth_err
+    try:
+        tickets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
+        with open(tickets_path, "w", encoding="utf-8-sig") as f:
+            f.write("工单ID,时间,用户问题,风险等级,分类,状态,用户IP\n")
+        return jsonify({"status": "ok", "message": "工单记录已清除"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route("/admin/tickets")
 def admin_tickets():
     """查看工单"""

@@ -95,9 +95,13 @@
                 });
         }
         function clearTickets() {
-            if (!confirm("确定清除工单记录？")) return;
-            fetch("/admin/reload", {method:"POST"});
-            document.getElementById("msg").innerHTML = '<span style=color:#f59e0b>请手动删除 logs/tickets.csv 文件</span>';
+            if (!confirm("确定清除所有工单记录？此操作不可恢复。")) return;
+            fetch("/admin/tickets/clear", {method:"POST"})
+                .then(r=>r.json())
+                .then(d=>{
+                    document.getElementById("msg").innerHTML = '<span style=color:'+(d.status=="ok"?"#19c37d":"#dc2626")+'">'+d.message+'</span>';
+                    if (d.status=="ok") setTimeout(function(){location.reload();}, 1000);
+                });
         }
     </script>
 </body>
