@@ -171,6 +171,19 @@ def chat():
         reply, source, category = FAST_INTENT_REPLIES[regex_intent]
         return jsonify({"reply": reply, "source": source, "category": category})
 
+        # 过度联想检查（在历史记录可用之后）
+    over_assoc_warn = ""
+    for symptom, rule in OVER_ASSOCIATION_BLOCK.items():
+        if symptom in question:
+            has_required = any(req in question for req in rule["requires"])
+            if history:
+                for h in history:
+                    if h.get("role") == "user" and any(req in h.get("content", "") for req in rule["requires"]):
+                        has_required = True
+                        break
+            if not has_required:
+                question = question + f"（注意：{rule['block_reason']}）"
+
     # === 2. 意图分类 ===
     if classifier_svc:
         classification = classifier_svc.classify(question, chat_context)
