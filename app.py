@@ -141,8 +141,27 @@ def chat():
         search["top_k"] = kb.search_top_k(sq, k=8)
         search["best_score"] = search["faq"]["score"] if search["faq"] else (search["top_k"][0]["score"] if search["top_k"] else 0.0)
 
-    # === 8. 相似度过滤 ===
+    # === 8. 相似度过滤 + 类别一致性校验 ===
     faq_ok = search["faq"] and search["faq"]["score"] >= 0.20
+
+    # 类别一致性校验：防止 FAQ 返回与分类器判断完全不同的答案
+    if faq_ok:
+        cls_cat = classification.get("category", "")
+        faq_cat = search["faq"]["category"] if search["faq"] else ""
+        # 高危类别对：不能混用
+        danger_pairs = [
+            ("燃气泄漏", "燃气缴费"), ("燃气泄漏", "开户安装"),
+            ("安全用气", "燃气缴费"), ("安全用气", "开户安装"),
+            ("燃气缴费", "安全用气"), ("燃气缴费", "燃气泄漏"),
+            ("开户安装", "安全用气"), ("开户安装", "燃气泄漏"),
+            ("灶具维修", "燃气泄漏"), ("热水器故障", "燃气泄漏"),
+        ]
+        mismatch = any(
+            (a in cls_cat and b in faq_cat) or (b in cls_cat and a in faq_cat)
+            for a, b in danger_pairs
+        )
+        if mismatch:
+            faq_ok = False  # 类别不匹配，降级走 RAG
 
     # === 9. DeepSeek生成 ===
     reply_text, reply_source, reply_meta = "", "guide", {}
