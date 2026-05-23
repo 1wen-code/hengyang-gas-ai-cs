@@ -404,6 +404,160 @@ def chat():
     return jsonify(resp)
 
 
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "hygas0826")
+
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "POST":
+        pwd = request.form.get("password", "")
+        if pwd == ADMIN_PASSWORD:
+            session["admin"] = True
+            return redirect("/admin")
+        return render_template("admin_login.html", error="密码错误")
+    return render_template("admin_login.html", error="")
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("admin", None)
+    return redirect("/admin/login")
+
+def _check_admin():
+    return session.get("admin", False)
+
+@app.route("/admin")
+def admin():
+    if not _check_admin():
+        return redirect("/admin/login")
+    # 读取统计数据
+    from config import KB_FAQ_PATH, KB_POLICY_PATH, TAG_SYSTEM_PATH
+    faq_count = 0
+    policy_count = 0
+    try:
+        faq_df = pd.read_csv(KB_FAQ_PATH, encoding="utf-8-sig")
+        faq_count = len(faq_df)
+    except: pass
+    try:
+        pol_df = pd.read_csv(KB_POLICY_PATH, encoding="utf-8-sig")
+        policy_count = len(pol_df)
+    except: pass
+
+    # 读取工单
+    tickets = []
+    tickets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
+    try:
+        with open(tickets_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            tickets = list(reader)[-20:]
+    except: pass
+
+    # 读取日志
+    logs = []
+    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "emergency.log")
+    try:
+        with open(log_path, "r", encoding="utf-8") as f:
+            logs = f.readlines()[-20:]
+    except: pass
+
+    return render_template("admin.html",
+        faq_count=faq_count, policy_count=policy_count,
+        tickets=tickets, logs=logs)
+
+
+@app.route("/admin/reload", methods=["POST"])
+def admin_reload():
+    if not _check_admin():
+        return jsonify({"error": "未登录"}), 401
+    try:
+        kb.reload()
+        return jsonify({"status": "ok", "message": "知识库已重新加载"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/admin/upload", methods=["POST"])
+def admin_upload():
+    if not _check_admin():
+        return jsonify({"error": "未登录"}), 401
+    """上传Excel更新知识库"""
+    from config import KB_FAQ_PATH
+    file = request.files.get("file")
+    if not file or not file.filename.endswith((".xlsx", ".csv")):
+        return jsonify({"status": "error", "message": "请上传.xlsx或.csv文件"}), 400
+
+    filepath = KB_FAQ_PATH
+    if file.filename.endswith(".csv"):
+        file.save(filepath)
+    else:
+        file.save(filepath.replace(".csv", ".xlsx"))
+
+    try:
+        kb.reload()
+        return jsonify({"status": "ok", "message": "知识库已更新并重新加载"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/admin/tickets/clear", methods=["POST"])
+def admin_tickets_clear():
+    """清除全部工单"""
+    if not _check_admin():
+        return jsonify({"error": "未登录"}), 401
+    try:
+        tickets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
+        with open(tickets_path, "w", encoding="utf-8-sig") as f:
+            f.write("工单ID,时间,用户问题,风险等级,分类,状态,用户IP\n")
+        return jsonify({"status": "ok", "message": "全部工单已清除"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/admin/tickets/resolve/<ticket_id>", methods=["POST"])
+def admin_tickets_resolve(ticket_id):
+    """标记工单为已解决（不删除，用户可见）"""
+    if not _check_admin():
+        return jsonify({"error": "未登录"}), 401
+    try:
+        tickets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
+        rows = []
+        with open(tickets_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            fieldnames = reader.fieldnames
+            for row in reader:
+                if row.get("工单ID") == ticket_id:
+                    row["状态"] = "已解决"
+                rows.append(row)
+        with open(tickets_path, "w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        return jsonify({"status": "ok", "message": f"工单 {ticket_id} 已标记为已解决"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/my-tickets")
+def my_tickets():
+    """用户查看自己的工单"""
+    user_id = session.get("user_id", "")
+    tickets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
+    my = []
+    try:
+        with open(tickets_path, "r", encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                if row.get("用户标识") == user_id:
+                    my.append(row)
+    except: pass
+    return render_template("my_tickets.html", tickets=my)
+
+@app.route("/admin/tickets")
+def admin_tickets():
+    """查看工单"""
+    tickets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
+    tickets = []
+    try:
+        with open(tickets_path, "r", encoding="utf-8-sig") as f:
+            tickets = list(csv.DictReader(f))
+    except: pass
+    return jsonify(tickets)
+
 @app.route("/api/intent", methods=["POST"])
 def analyze_intent():
     """用户意图理解接口 — LLM深度语义理解"""
