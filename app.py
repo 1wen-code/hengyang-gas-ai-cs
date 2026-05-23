@@ -556,6 +556,47 @@ def admin_tickets():
     except: pass
     return jsonify(tickets)
 
+@app.route("/admin/chat-logs")
+def admin_chat_logs():
+    """最近50条对话记录"""
+    if not _check_admin():
+        return jsonify({"error": "未登录"}), 401
+    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "chat_log.csv")
+    logs = []
+    try:
+        with open(log_path, "r", encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                logs.append(row)
+    except:
+        pass
+    return jsonify(logs[-50:])
+
+@app.route("/admin/risk-trends")
+def admin_risk_trends():
+    """最近7天风险统计"""
+    if not _check_admin():
+        return jsonify({"error": "未登录"}), 401
+    from datetime import datetime, timedelta
+    tickets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
+    today = datetime.now().strftime("%Y-%m-%d")
+    trends = {}
+    for i in range(6, -1, -1):
+        d = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+        trends[d] = {"high": 0, "medium": 0, "total": 0}
+    try:
+        with open(tickets_path, "r", encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                date = row.get("时间", "")[:10]
+                if date in trends:
+                    trends[date]["total"] += 1
+                    if row.get("风险等级", "") in ("高危", "紧急"):
+                        trends[date]["high"] += 1
+                    else:
+                        trends[date]["medium"] += 1
+    except:
+        pass
+    return jsonify(list(trends.items()))
+
 @app.route("/api/intent", methods=["POST"])
 def analyze_intent():
     """用户意图理解接口 — LLM深度语义理解"""

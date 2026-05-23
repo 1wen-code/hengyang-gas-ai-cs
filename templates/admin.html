@@ -106,7 +106,20 @@
             .stat-card .num { font-size: 22px; }
             .ticket-question { font-size: 13px; }
         }
-    </style>
+    
+        /* Risk trend */
+        .trend-bar { display: flex; align-items: end; gap: 4px; height: 120px; padding: 8px 0; }
+        .trend-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .trend-col .bar-wrap { width: 100%; display: flex; flex-direction: column; gap: 2px; align-items: center; }
+        .trend-col .bar { width: 100%; border-radius: 4px 4px 0 0; min-width: 8px; transition: height 0.5s; }
+        .trend-col .bar.high { background: var(--red); }
+        .trend-col .bar.medium { background: var(--orange); }
+        .trend-col .date { font-size: 10px; color: var(--dimmer); margin-top: 4px; }
+        .trend-col .count { font-size: 10px; color: var(--muted); }
+        .chart-legend { display: flex; gap: 16px; font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+        .chart-legend span { display: inline-flex; align-items: center; gap: 4px; }
+        .legend-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+</style>
 </head>
 <body>
 <div class="nav">
@@ -181,6 +194,15 @@
 </div>
 
 <!-- 工单列表（卡片式） -->
+<h2>风险趋势（近7天）</h2>
+<div class="chart-legend">
+    <span><span class="legend-dot" style="background:var(--red)"></span> 高风险</span>
+    <span><span class="legend-dot" style="background:var(--orange)"></span> 中风险</span>
+</div>
+<div class="trend-bar" id="trendBar">
+    <div style="color:var(--dimmer);font-size:12px;padding:20px">加载中...</div>
+</div>
+
 <h2>紧急工单</h2>
 <div class="ticket-list">
     {% if tickets %}
@@ -218,6 +240,11 @@
 </div>
 
 <!-- 安全日志 -->
+<h2>最近对话记录</h2>
+<div class="chat-log" id="chatLog" style="max-height:250px">
+    <div style="color:var(--dimmer);font-size:12px">加载中...</div>
+</div>
+
 <h2>安全日志</h2>
 <div class="log" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;font-family:monospace;font-size:12px;max-height:200px;overflow-y:auto;white-space:pre-wrap;color:var(--muted);">
 {% for l in logs %}{{ l }}{% endfor %}
@@ -278,6 +305,47 @@ function showDetail(btn) {
 function closeDetail() {
     document.getElementById("detailModal").classList.remove("active");
 }
+
+// 加载对话日志
+fetch("/admin/chat-logs").then(r=>r.json()).then(data=>{
+    if(!Array.isArray(data) || !data.length) {
+        document.getElementById("chatLog").innerHTML = '<div style="color:var(--dimmer);font-size:12px">暂无对话记录</div>';
+        return;
+    }
+    var html = '';
+    data.reverse().slice(0, 15).forEach(function(row){
+        var rt = row['风险等级'] || '普通';
+        var tag = rt.includes('高') ? '<span class="tag tag-high" style="font-size:9px">'+rt+'</span>' :
+                  rt.includes('中') || rt.includes('疑似') ? '<span class="tag tag-medium" style="font-size:9px">'+rt+'</span>' : '';
+        html += '<div class="entry"><span class="user" style="font-size:11px">'+escHtml(row['用户问题']||'')+'</span>';
+        html += ' <span style="color:var(--dimmer);font-size:10px">→</span> ';
+        html += '<span class="ai" style="font-size:11px">'+escHtml(row['AI回答']||'').substring(0,50)+'</span>'+tag+'</div>';
+    });
+    document.getElementById("chatLog").innerHTML = html;
+}).catch(function(){ document.getElementById("chatLog").innerHTML = '<div style="color:var(--dimmer);font-size:12px">加载失败</div>'; });
+
+// 加载风险趋势
+fetch("/admin/risk-trends").then(r=>r.json()).then(data=>{
+    if(!Array.isArray(data) || !data.length) return;
+    var maxTotal = 1;
+    data.forEach(function(d){ maxTotal = Math.max(maxTotal, d[1].total); });
+    var html = '';
+    data.forEach(function(d){
+        var date = d[0];
+        var vals = d[1];
+        var hPct = Math.round(vals.high / maxTotal * 100);
+        var mPct = Math.round((vals.medium || vals.total - vals.high) / maxTotal * 100);
+        var dLabel = date.substring(5);
+        html += '<div class="trend-col"><div class="count">'+(vals.total||0)+'</div>';
+        html += '<div class="bar-wrap">';
+        if(vals.high > 0) html += '<div class="bar high" style="height:'+Math.max(hPct,8)+'px"></div>';
+        if(vals.total - vals.high > 0) html += '<div class="bar medium" style="height:'+Math.max(mPct,8)+'px"></div>';
+        html += '</div><div class="date">'+dLabel+'</div></div>';
+    });
+    document.getElementById("trendBar").innerHTML = html;
+}).catch(function(){ document.getElementById("trendBar").innerHTML = '<div style="color:var(--dimmer);font-size:12px;padding:20px">暂无数据</div>'; });
+
+function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 </script>
 </body>
 </html>
