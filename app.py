@@ -363,6 +363,20 @@ def chat():
     server_memory.append({"role": "assistant", "content": reply_text})
     session["conversation_memory"] = server_memory[-20:]
 
+    # 保存对话日志
+    try:
+        from datetime import datetime
+        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "chat_log.csv")
+        log_exists = os.path.exists(log_path)
+        with open(log_path, "a", newline="", encoding="utf-8-sig") as f:
+            w = csv.writer(f)
+            if not log_exists:
+                w.writerow(["时间", "用户问题", "AI回答", "风险等级", "来源"])
+            rl = risk.get("label", "普通") if isinstance(risk, dict) else "普通"
+            w.writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), question[:100], reply_text[:100], rl, reply_source])
+    except:
+        pass
+
     # 更新会话状态
     try:
         is_asking = any(q in reply_text for q in ["请问", "哪种", "哪个", "选", "1.", "2.", "①", "②"])
