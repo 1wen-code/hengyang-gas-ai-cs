@@ -1198,3 +1198,80 @@ class EmotionDetectionService:
             "need_calm_first": False,
             "tone_suggestion": "正常回答",
         }
+
+
+# ── 模糊语义拦截模块（答案生成前检查）─────────
+
+FUZZY_DETECTION_PROMPT = """你是燃气AI客服系统的"模糊语义识别模块"。
+
+判断用户描述是否过于模糊，无法直接给出准确答案。
+
+输出 JSON（只输出 JSON）：
+
+{{
+"is_fuzzy": false,
+"reason": "",
+"suggested_question": ""
+}}
+
+---
+
+以下情况属于模糊描述（is_fuzzy = true）：
+
+* 方言/口语/错别字/非标准表达
+* 只描述了"有问题"、"不对劲"、"怪怪的"但没有具体现象
+* 无法确定具体设备和故障类型
+
+以下词语属于高模糊风险：
+冒扑、怪怪的、不对劲、有问题、不正常、发飘、哒哒响、怪味、有点冲、火不稳、怪声音、没劲、时好时坏
+
+---
+
+规则：
+
+1. 如果用户描述模糊 → is_fuzzy = true，reason 说明哪里模糊，suggested_question 给出追问话术
+2. 如果用户描述清晰具体 → is_fuzzy = false
+3. 模糊描述禁止直接给解决方案，必须先追问确认现象
+
+---
+
+当前问题：
+{question}"""
+
+
+class FuzzyDetectionService:
+    """模糊语义识别 — 检测用户描述是否过于模糊，强制追问"""
+
+    def __init__(self, client: OpenAI):
+        self._client = client
+
+    def detect(self, question: str) -> dict:
+        try:
+            prompt = FUZZY_DETECTION_PROMPT.format(question=question)
+            resp = self._client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
+                messages=[{"role": "system", "content": prompt}],
+                temperature=0.0,
+                max_tokens=150,
+            )
+            raw = resp.choices[0].message.content.strip()
+            return self._parse(raw)
+        except Exception:
+            return self._default()
+
+    def _parse(self, raw: str) -> dict:
+        import json, re
+        m = re.search(r'\{[\s\S]*\}', raw)
+        if m: raw = m.group(0)
+        try:
+            data = json.loads(raw)
+            return {
+                "is_fuzzy": data.get("is_fuzzy", False),
+                "reason": data.get("reason", ""),
+                "suggested_question": data.get("suggested_question", ""),
+            }
+        except:
+            return self._default()
+
+    def _default(self) -> dict:
+        return {"is_fuzzy": False, "reason": "", "suggested_question": ""}

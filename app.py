@@ -7,7 +7,7 @@ from config import SECRET_KEY, DEBUG, ENABLE_AI_FALLBACK
 from services.knowledge_service import KnowledgeService
 from services.ai_service import (
     AIService, IntentDetector, IntentUnderstandingService, RiskDetectionService,
-    TicketGenerationService, IntentClassifierService, EmotionDetectionService,
+    TicketGenerationService, IntentClassifierService, EmotionDetectionService, FuzzyDetectionService,
     REJECT_REPLY, GREETING_REPLY, IDENTITY_REPLY, BUSINESS_GUIDE_REPLY,
     REFUND_REPLY, EMOTION_REPLY, EMOTION_LIGHT_REPLY, CRISIS_REPLY, COMPLAINT_REPLY,
 )
@@ -24,6 +24,7 @@ risk_svc = RiskDetectionService(ai._client) if ai else None
 ticket_svc = TicketGenerationService(ai._client) if ai else None
 classifier_svc = IntentClassifierService(ai._client) if ai else None
 emotion_svc = EmotionDetectionService(ai._client) if ai else None
+fuzzy_svc = FuzzyDetectionService(ai._client) if ai else None
 
 TRANSFER_REPLY = (
     "非常抱歉，我暂时无法准确回答您的问题。"
@@ -171,9 +172,24 @@ def chat():
             # 让 AI 结合分类结果自主推理，不用模糊的 FAQ 回答
             faq_ok = False
 
+    # === 8.5 模糊语义拦截 ===
+    fuzzy = {"is_fuzzy": False, "reason": "", "suggested_question": ""}
+    if fuzzy_svc:
+        fuzzy = fuzzy_svc.detect(question)
+
     # === 9. DeepSeek生成 ===
     reply_text, reply_source, reply_meta = "", "guide", {}
-    if faq_ok:
+
+    # 模糊描述：强制追问，不输出维修步骤
+    if fuzzy.get("is_fuzzy"):
+        if ai:
+            r = ai.ask_with_rag(question=question, kb_contexts=search["top_k"], history=history,
+                                standard_question=biz["standard_question"], category=biz["category"],
+                                match_score=0.0)  # 传0分强制追问模式
+        if not r:
+            r = fuzzy.get("suggested_question", "") or "请详细描述一下您遇到的问题，比如是什么设备、出现了什么现象？"
+        reply_text, reply_source, reply_meta = r, "ai_rag", {"rag_count": len(search["top_k"]), "fuzzy_intercept": True}
+    elif faq_ok:
         f = search["faq"]
         reply_text, reply_source = f["answer"], "faq"
         reply_meta = {"match_question": f["question"], "score": f["score"], "law_basis": f.get("law",""), "law_code": f.get("law_code","")}
@@ -215,6 +231,7 @@ def chat():
         "intent": {"regex_intent": regex_intent, "real_intent": biz["real_intent"],
                    "standard_question": biz["standard_question"], "category": biz["category"]},
         "emotion": emotion,
+        "fuzzy": fuzzy,
         "risk": {"level": risk["level"], "label": risk["label"], "reason": risk["reason"]},
         "classification": classification,
         "search": {"faq_hit": search["faq"] is not None, "policy_hit": search["policy"] is not None,
