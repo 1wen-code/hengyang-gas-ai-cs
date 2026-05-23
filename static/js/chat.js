@@ -13,14 +13,11 @@
     const toggleSidebar = document.getElementById("toggleSidebar");
     const sidebar = document.getElementById("sidebar");
     const historyList = document.getElementById("historyList");
-    const transferBtn = document.getElementById("transferBtn");
-
     // ── 状态 ───────────────────────────────────────
     let isWaiting = false;
     let currentChatId = Date.now();
     let chatHistory = [];
     let conversations = {};
-    let transferFailCount = 0;
     let thinkingInterval = null;
 
     // ── 来源标签映射 ───────────────────────────────
@@ -119,13 +116,6 @@
                 sendMessage(btn.dataset.msg);
             });
         });
-        // 转人工按钮
-        if (transferBtn) {
-            transferBtn.addEventListener("click", function(e) {
-                e.preventDefault();
-                sendMessage("转人工客服");
-            });
-        }
     }
 
     // ── 发送 ───────────────────────────────────────
@@ -149,12 +139,6 @@
         messageInput.value = "";
         autoResizeInput();
         updateSendButton();
-
-        // 转人工检测
-        const isTransferRequest = /转人工|人工客服|人工服务|找人工|我要找人/.test(text);
-        if (isTransferRequest) {
-            transferFailCount = 0;
-        }
 
         appendMessage("user", text);
         const typingEl = appendTyping();
@@ -202,8 +186,6 @@
                         addQuickReplies(data.source, msgDiv);
                     }
 
-                    // 转人工条件判断
-                    evaluateTransferVisibility(data);
                 }
                 saveMessage("user", text);
                 saveMessage("bot", data.reply, data.source,
@@ -213,11 +195,9 @@
             })
             .catch(function () {
                 removeTyping(typingEl);
-                transferFailCount++;
                 appendMessage("bot",
                     "网络连接异常，请稍后重试。紧急情况请拨打 24 小时客服热线 0734-8677777。",
                     "error");
-                evaluateTransferVisibility(null);
             })
             .finally(function () {
                 isWaiting = false;
@@ -228,34 +208,6 @@
                     messageInput.dispatchEvent(new Event("input"));
                 }, 100);
             });
-    }
-
-    // ── 转人工条件判断 ──────────────────────────────
-    function evaluateTransferVisibility(data) {
-        if (!transferBtn) return;
-
-        let shouldShow = false;
-
-        // 条件1: 响应明确要求转人工
-        if (data && (data.source === "transfer" || data.source === "emergency")) {
-            shouldShow = true;
-        }
-        // 条件2: 连续3次无法理解
-        if (transferFailCount >= 3) {
-            shouldShow = true;
-        }
-        // 条件3: 高危风险
-        if (data && data.risk && data.risk.level >= 3) {
-            shouldShow = true;
-        }
-        // 条件4: AI拒绝回答
-        if (data && data.source === "reject") {
-            shouldShow = true;
-        }
-
-        if (shouldShow) {
-            transferBtn.classList.add("visible");
-        }
     }
 
     // ── 消息渲染 ───────────────────────────────────
@@ -558,8 +510,6 @@
                     msg.matchQuestion, msg.category);
             });
         }
-        transferFailCount = 0;
-        if (transferBtn) transferBtn.classList.remove("visible");
         renderHistoryList();
         scrollToBottom();
         updateSystemStats();
@@ -569,8 +519,6 @@
         if (isWaiting) return;
         currentChatId = Date.now();
         chatHistory = [];
-        transferFailCount = 0;
-        if (transferBtn) transferBtn.classList.remove("visible");
         const oldBanner = document.getElementById("emergencyBanner");
         if (oldBanner) oldBanner.remove();
 

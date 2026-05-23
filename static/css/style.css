@@ -866,35 +866,6 @@ body {
 .send-btn:active { transform: scale(0.95); }
 .send-btn:disabled, .send-btn.sending { opacity: 0.3; cursor: not-allowed; }
 
-/* 转人工按钮 — 条件显示 */
-.transfer-btn {
-    display: none;
-    align-items: center;
-    gap: 5px;
-    padding: 8px 14px;
-    border: 1px solid var(--danger);
-    border-radius: var(--radius-full);
-    background: transparent;
-    color: var(--danger);
-    font-size: var(--font-sm);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-.transfer-btn.visible { display: flex; }
-
-.transfer-btn:hover { background: var(--danger-dim); }
-
-.transfer-btn .queue-badge {
-    background: var(--danger);
-    color: #fff;
-    font-size: 10px;
-    padding: 1px 5px;
-    border-radius: var(--radius-full);
-}
-
 .input-hint {
     text-align: center;
     font-size: var(--font-xs);
@@ -1203,7 +1174,6 @@ body {
     .quick-reply-btn { padding: 5px 10px; font-size: 11px; white-space: nowrap; }
 
     /* ====== 其他 ====== */
-    .transfer-btn { padding: 6px 10px; font-size: var(--font-xs); }
     #voiceBtn { width: 34px; height: 34px; }
     .message-content { max-width: 100%; }
 }
