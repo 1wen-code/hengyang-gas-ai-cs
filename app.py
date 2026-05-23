@@ -12,6 +12,7 @@ from services.ai_service import (
     REFUND_REPLY, EMOTION_REPLY, EMOTION_LIGHT_REPLY, CRISIS_REPLY, COMPLAINT_REPLY,
 )
 from services.emergency import detect_emergency, generate_ticket, log_emergency
+from services.ai_service import FUZZY_MAP, OVER_ASSOCIATION_BLOCK
 import os, csv, pandas as pd
 
 app = Flask(__name__)
@@ -42,7 +43,7 @@ def index():
 
 # ══════════════════════════════════════════════════════
 # 十一层管道架构
-# 用户输入 → 上下文记忆 → 意图分类 → 情绪识别 → 风险识别
+# 用户输入 → 状态机判断 → 风险模块 → 模糊语义 → 意图分类 → RAG检索 → Answer生成
 # → 业务状态 → 是否RAG → 检索 → 相似度过滤 → DeepSeek生成
 # → 工单生成 → 后台管理
 # ══════════════════════════════════════════════════════
@@ -83,7 +84,74 @@ def chat():
     client_history = data.get("history", [])
     client_ip = request.remote_addr or ""
 
-    # === 1. 上下文记忆 ===
+    
+    # === 0. 状态机优先判断 ===
+    conversation_state = session.get("conversation_state", {})
+    if not isinstance(conversation_state, dict):
+        conversation_state = {}
+
+    awaiting_option = conversation_state.get("awaiting_option", False)
+    fault_type = conversation_state.get("fault_type", "")
+    safe_confirm_count = conversation_state.get("safe_confirm_count", 0)
+
+    # 状态锁：等待用户选择选项时，直接解析选项编号
+    if awaiting_option and question.strip() in ["1", "2", "3", "4", "5"]:
+        option = int(question.strip())
+        session["conversation_state"] = {
+            "awaiting_option": False,
+            "fault_type": fault_type,
+            "risk_active": conversation_state.get("risk_active", False),
+            "safe_confirm_count": safe_confirm_count,
+            "last_option_selected": option,
+        }
+        # 把选项编号转为语义传给管道
+        question = f"用户选择了第{option}个选项（上一轮故障类型：{fault_type}）"
+
+    # 风险冷却机制：需要连续2次安全确认才能解除风险
+    risk_active = conversation_state.get("risk_active", False)
+    safety_confirm_words = ["没味了", "没味道了", "关了", "关好了", "通风了", "不晕了",
+                            "修好了", "换好了", "正常了", "解决了", "没事了", "好了"]
+    safety_count = sum(1 for w in safety_confirm_words if w in question)
+
+    if risk_active and safety_count >= 1:
+        safe_confirm_count += 1
+        if safe_confirm_count >= 2:
+            risk_active = False
+            safe_confirm_count = 0
+    elif not risk_active:
+        safe_confirm_count = 0
+
+    session["conversation_state"] = {
+        "awaiting_option": awaiting_option,
+        "fault_type": fault_type,
+        "risk_active": risk_active,
+        "safe_confirm_count": safe_confirm_count,
+    }
+
+    # 模糊词替换：方言口语 → 标准故障标签
+    fuzzy_hits = []
+    for fuzzy_word, standard_label in FUZZY_MAP.items():
+        if fuzzy_word in question:
+            fuzzy_hits.append(standard_label)
+    if fuzzy_hits:
+        question = question + "（系统识别口语含义：" + "、".join(fuzzy_hits) + "）"
+
+    # 过度联想检查：单症状不能判泄漏
+    over_assoc_warn = ""
+    for symptom, rule in OVER_ASSOCIATION_BLOCK.items():
+        if symptom in question:
+            has_required = any(req in question for req in rule["requires"])
+            # Also check history
+            if history:
+                for h in history:
+                    if h.get("role") == "user" and any(req in h.get("content", "") for req in rule["requires"]):
+                        has_required = True
+                        break
+            if not has_required:
+                over_assoc_warn = f"（注意：{rule['block_reason']}）"
+                question = question + over_assoc_warn
+
+# === 1. 上下文记忆 ===
     server_memory = session.get("conversation_memory", [])
     seen = set()
     merged = []
@@ -236,6 +304,14 @@ def chat():
     server_memory.append({"role": "user", "content": question})
     server_memory.append({"role": "assistant", "content": reply_text})
     session["conversation_memory"] = server_memory[-20:]
+
+    # 更新会话状态：如果AI回答以追问结尾，设置awaiting_option
+    is_asking = any(q in reply_text for q in ["请问", "哪种", "哪个", "选", "1.", "2.", "①", "②"])
+    conversation_state["awaiting_option"] = is_asking
+    conversation_state["fault_type"] = biz.get("category", fault_type)
+    conversation_state["risk_active"] = risk_active or risk["level"] >= 2
+    conversation_state["safe_confirm_count"] = safe_confirm_count
+    session["conversation_state"] = conversation_state
 
     top1_score = search["top_k"][0]["score"] if search["top_k"] else 0.0
     resp = {
