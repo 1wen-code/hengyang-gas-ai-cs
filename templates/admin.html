@@ -93,6 +93,8 @@
         .chat-log .user { color: var(--blue); }
         .chat-log .ai { color: var(--green); }
         .chat-log .risk-tag { font-size: 10px; padding: 1px 4px; border-radius: 3px; margin-left: 6px; }
+        .entry .full { display: none; }
+        .entry.open .full { display: block; }
 
         /* Desktop table (hidden on mobile) */
         @media (min-width: 768px) {
@@ -181,14 +183,14 @@
 <div class="alert-list">
     {% if tickets %}
     {% for t in (tickets|reverse|list)[:5] %}
-    <div class="alert-item" onclick="this.querySelector('.alert-detail').style.display=this.querySelector('.alert-detail').style.display=='none'?'block':'none'" style="cursor:pointer" {{ 'medium' if t.get('风险等级','') not in ('高危','紧急') else '' }}">
+    <div class="alert-item {{ 'medium' if t.get('风险等级','') not in ('高危','紧急') else '' }}" onclick="var d=this.querySelector('.alert-detail');d.style.display=d.style.display=='none'?'block':'none'" style="cursor:pointer">
         <span class="alert-dot {{ 'high' if t.get('风险等级','') in ('高危','紧急') else 'medium' }}"></span>
         <span>"{{ t.get('用户问题', '')[:40] }}"</span>
         <div class="alert-detail" style="display:none;margin-top:6px;font-size:11px;color:var(--dimmer)">点击查看完整AI分析</div><span class="alert-time">{{ t.get('时间', '')[-8:] if t.get('时间','')|length > 8 else t.get('时间','') }}</span>
     </div>
     {% endfor %}
     {% else %}
-    <div class="alert-item" onclick="this.querySelector('.alert-detail').style.display=this.querySelector('.alert-detail').style.display=='none'?'block':'none'" style="cursor:pointer" medium">
+    <div class="alert-item medium" onclick="var d=this.querySelector('.alert-detail');d.style.display=d.style.display=='none'?'block':'none'" style="cursor:pointer">
         <span class="alert-dot medium"></span>
         <span>暂无风险事件，系统正常运行</span>
     </div>
@@ -347,7 +349,7 @@ fetch("/admin/chat-logs").then(r=>r.json()).then(data=>{
                   rt.includes('中') || rt.includes('疑似') ? '<span class="tag tag-medium" style="font-size:9px">'+rt+'</span>' : '';
         var qText = escHtml(row['用户问题']||'').substring(0, 40);
         var aText = escHtml(row['AI回答']||'').substring(0, 40);
-        html += '<div class="entry" style="cursor:pointer" onclick="this.querySelector('.full').style.display=this.querySelector('.full').style.display=='none'?'block':'none'">';
+        html += '<div class="entry" style="cursor:pointer" onclick="this.classList.toggle(\'open\')">';
         html += '<span class="user" style="font-size:11px">'+qText+'</span>';
         html += ' <span style="color:var(--dimmer);font-size:10px">→</span> ';
         html += '<span class="ai" style="font-size:11px">'+aText+'</span>'+tag;
