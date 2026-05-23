@@ -86,7 +86,10 @@ def chat():
 
     
     # === 0. 状态机优先判断 ===
-    conversation_state = session.get("conversation_state", {})
+    try:
+        conversation_state = session.get("conversation_state", {}) or {}
+    except:
+        conversation_state = {}
     if not isinstance(conversation_state, dict):
         conversation_state = {}
 
@@ -305,13 +308,17 @@ def chat():
     server_memory.append({"role": "assistant", "content": reply_text})
     session["conversation_memory"] = server_memory[-20:]
 
-    # 更新会话状态：如果AI回答以追问结尾，设置awaiting_option
-    is_asking = any(q in reply_text for q in ["请问", "哪种", "哪个", "选", "1.", "2.", "①", "②"])
-    conversation_state["awaiting_option"] = is_asking
-    conversation_state["fault_type"] = biz.get("category", fault_type)
-    conversation_state["risk_active"] = risk_active or risk["level"] >= 2
-    conversation_state["safe_confirm_count"] = safe_confirm_count
-    session["conversation_state"] = conversation_state
+    # 更新会话状态
+    try:
+        is_asking = any(q in reply_text for q in ["请问", "哪种", "哪个", "选", "1.", "2.", "①", "②"])
+        st = conversation_state.copy() if isinstance(conversation_state, dict) else {}
+        st["awaiting_option"] = is_asking
+        st["fault_type"] = biz.get("category", fault_type)
+        st["risk_active"] = risk_active or (isinstance(risk, dict) and risk.get("level", 0) >= 2)
+        st["safe_confirm_count"] = safe_confirm_count
+        session["conversation_state"] = st
+    except:
+        pass
 
     top1_score = search["top_k"][0]["score"] if search["top_k"] else 0.0
     resp = {
