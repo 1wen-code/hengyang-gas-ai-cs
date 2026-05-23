@@ -1047,3 +1047,96 @@ class IntentClassifierService:
             "risk_level": "",
             "confidence": 0.0,
         }
+
+
+# ── 情绪识别模块（第三层：上下文后、风险前）─────
+
+EMOTION_DETECTION_PROMPT = """你是燃气AI客服系统的"情绪识别模块"。
+
+分析用户当前消息中的情绪状态。
+
+输出 JSON（只输出 JSON）：
+
+{{
+"emotion": "",
+"intensity": 0,
+"need_calm_first": false,
+"tone_suggestion": ""
+}}
+
+情绪类型（emotion）：
+* calm — 平静、正常咨询
+* anxious — 焦虑、担心（如闻到煤气味、打不着火）
+* angry — 愤怒、不满（如投诉、骂人）
+* frustrated — 沮丧、无奈（如多次尝试失败）
+* urgent — 紧急、恐慌（如泄漏、爆炸）
+* sad — 悲伤、低落
+* confused — 困惑、不确定
+
+强度（intensity）：0-10
+* 0-3: 轻微
+* 4-6: 中等
+* 7-10: 强烈
+
+need_calm_first：
+* true — 需要先安抚情绪，再处理问题
+* false — 可以直接回答
+
+tone_suggestion：
+* 如"先道歉"、"表达理解"、"快速给出方案"、"安抚+引导"、"正常回答"
+
+---
+
+历史聊天：
+{chat_history}
+
+当前消息：
+{question}"""
+
+
+class EmotionDetectionService:
+    """情绪识别 — 分析用户情绪，指导客服话术"""
+
+    def __init__(self, client: OpenAI):
+        self._client = client
+
+    def detect(self, question: str, chat_history: str = "") -> dict:
+        try:
+            prompt = EMOTION_DETECTION_PROMPT.format(
+                chat_history=chat_history or "（无历史记录）",
+                question=question,
+            )
+            resp = self._client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
+                messages=[{"role": "system", "content": prompt}],
+                temperature=0.0,
+                max_tokens=150,
+            )
+            raw = resp.choices[0].message.content.strip()
+            return self._parse(raw)
+        except Exception:
+            return self._default()
+
+    def _parse(self, raw: str) -> dict:
+        import json, re
+        m = re.search(r'\{[\s\S]*\}', raw)
+        if m:
+            raw = m.group(0)
+        try:
+            data = json.loads(raw)
+            return {
+                "emotion": data.get("emotion", "calm"),
+                "intensity": int(data.get("intensity", 0)),
+                "need_calm_first": data.get("need_calm_first", False),
+                "tone_suggestion": data.get("tone_suggestion", "正常回答"),
+            }
+        except (json.JSONDecodeError, ValueError):
+            return self._default()
+
+    def _default(self) -> dict:
+        return {
+            "emotion": "calm",
+            "intensity": 0,
+            "need_calm_first": False,
+            "tone_suggestion": "正常回答",
+        }
