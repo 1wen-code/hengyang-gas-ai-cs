@@ -168,6 +168,18 @@ def chat():
     history = merged[-20:]
     chat_context = _fmt_history(history)
 
+    # === 1.5 UNDERSTAND 语义归一化 ===
+    understand = {"normalized_intent": question, "possible_scene": "", "risk_hint": "none", "emotion": ""}
+    if understand_svc:
+        try:
+            result = understand_svc.normalize(question, chat_context)
+            if result and result.get("normalized_intent"):
+                understand = result
+                if understand["normalized_intent"] != question:
+                    question = understand["normalized_intent"]
+        except:
+            pass
+
     # === 1b. 快速过滤 ===
     regex_intent = IntentDetector.detect(question)
     if regex_intent in FAST_INTENT_REPLIES:
