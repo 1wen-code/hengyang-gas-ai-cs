@@ -473,7 +473,7 @@ body {
 /* --- 快捷入口卡片 --- */
 .quick-entry-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: 10px;
     max-width: 540px;
     width: 100%;
@@ -1052,33 +1052,35 @@ body {
     .toggle-sidebar-btn svg { width: 24px; height: 24px; }
     .toggle-sidebar-btn::after { content: '历史'; font-size: 11px; margin-left: 4px; }
 
-    .status-bar { gap: 4px; }
-    .status-capsule { padding: 2px 8px; font-size: 9px; }
+    .status-bar { gap: 3px; flex-wrap: wrap; }
+    .status-capsule { padding: 2px 6px; font-size: 8px; gap: 3px; }
+    .status-capsule .dot { width: 5px; height: 5px; }
     .header-info { display: none; }
 
-    .message { padding: 12px 12px; }
+    .message { padding: 12px 10px; }
 
     .message.user .message-body,
-    .message.bot .message-body { max-width: 88%; }
+    .message.bot .message-body { max-width: 90%; }
 
-    .quick-entry-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
-    .quick-entry-card { padding: 10px 6px; }
-    .quick-entry-card .entry-icon { font-size: 20px; }
-    .quick-entry-card .entry-label { font-size: 11px; }
+    .quick-entry-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .quick-entry-card { padding: 12px 8px; }
+    .quick-entry-card .entry-icon { font-size: 22px; }
+    .quick-entry-card .entry-label { font-size: 12px; }
 
     .system-status { grid-template-columns: repeat(2, 1fr); gap: 8px; }
     .status-card { padding: 10px 8px; }
     .status-card-value { font-size: var(--font-lg); }
 
-    .welcome-screen { padding: 24px 12px; }
-    .welcome-screen h2 { font-size: var(--font-xl); }
-    .welcome-logo { width: 64px; height: 64px; }
+    .welcome-screen { padding: 20px 10px; }
+    .welcome-screen h2 { font-size: var(--font-lg); }
+    .welcome-subtitle { font-size: var(--font-sm); margin-bottom: 20px; }
+    .welcome-logo { width: 56px; height: 56px; }
 
     .chat-input-area { padding: 8px 8px; padding-bottom: max(8px, env(safe-area-inset-bottom, 8px)); }
 
     .input-wrapper {
         border-radius: var(--radius-xl);
-        padding: 4px 4px 4px 14px;
+        padding: 4px 4px 4px 12px;
         gap: 4px;
     }
 
@@ -1093,13 +1095,14 @@ body {
     }
 
     .input-hint { font-size: 9px; margin-top: 4px; }
-    .ai-first-hint { font-size: 10px; }
+    .ai-first-hint { font-size: 9px; padding: 0 0 4px; }
 
-    .quick-replies { padding: 6px 8px 6px 14px; }
+    .quick-replies { padding: 6px 8px 6px 10px; }
+    .quick-reply-btn { padding: 5px 10px; font-size: 11px; }
 
     .message-content { max-width: 100%; }
 
     .transfer-btn { padding: 6px 10px; font-size: var(--font-xs); }
 
-    #voiceBtn { width: 36px; height: 36px; }
+    #voiceBtn { width: 34px; height: 34px; }
 }
