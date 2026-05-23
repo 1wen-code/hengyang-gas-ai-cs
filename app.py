@@ -339,6 +339,13 @@ def chat():
             reply_meta = {"rag_count": len(search["top_k"])}
     if not reply_text:
         reply_text, reply_source = BUSINESS_GUIDE_REPLY, "guide"
+
+    # 旧前端兼容：风险事件设置正确的source和追加安全提醒
+    if risk["level"] >= 3:
+        reply_source = "emergency"
+    elif risk["level"] >= 2:
+        reply_source = "warning"
+
     if risk["safety_prefix"] and risk["safety_prefix"] not in reply_text:
         reply_text = risk["safety_prefix"] + "\n\n" + reply_text
 
@@ -373,6 +380,9 @@ def chat():
     top1_score = search["top_k"][0]["score"] if search["top_k"] else 0.0
     resp = {
         "reply": reply_text, "source": reply_source, "category": biz["category"],
+        # 旧格式兼容字段（前端还在用）
+        "risk_level": risk.get("label", ""), "risk_code": risk.get("level", 1),
+        "ticket_id": ticket["keyword_ticket"]["工单ID"] if ticket else None,
         "intent": {"regex_intent": regex_intent, "real_intent": biz["real_intent"],
                    "standard_question": biz["standard_question"], "category": biz["category"]},
         "emotion": emotion,
