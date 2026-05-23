@@ -665,7 +665,8 @@ body {
 
 .source-tag.knowledge_base { background: var(--accent-dim); color: var(--accent); }
 .source-tag.ai, .source-tag.ai_rag { background: var(--info-dim); color: var(--info); }
-.source-tag.transfer { background: var(--danger-dim); color: var(--danger); }
+.source-tag.transfer { background: var(--info-dim); color: var(--info); }
+.source-tag.refund { background: var(--info-dim); color: var(--info); }
 .source-tag.emergency { background: rgba(220, 38, 38, 0.2); color: var(--danger); font-weight: 700; }
 .source-tag.greeting { background: var(--accent-dim); color: var(--accent); }
 .source-tag.identity { background: rgba(168, 85, 247, 0.12); color: #a855f7; }

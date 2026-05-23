@@ -117,6 +117,8 @@ FAST_INTENT_REPLIES = {
     "complaint": (COMPLAINT_REPLY,     "complaint", "投诉建议 > 投诉受理"),
     "greeting":  (GREETING_REPLY,      "greeting",  "智能欢迎 > 问候"),
     "identity":  (IDENTITY_REPLY,      "identity",  "智能欢迎 > 身份介绍"),
+    "transfer":  (TRANSFER_REPLY,      "transfer",  "人工服务 > 用户请求转人工"),
+    "refund":    (REFUND_REPLY,        "refund",    "退款业务 > 业务引导"),
     "irrelevant":(REJECT_REPLY,        "reject",    "转人工 > 超出范围"),
 }
 
@@ -299,6 +301,13 @@ def chat():
     history = merged[-20:]
     chat_context = _fmt_history(history)
 
+    # === 1b. 快速过滤（用原始问题，非归一化后） ===
+    original_question = question
+    regex_intent = IntentDetector.detect(original_question)
+    if regex_intent in FAST_INTENT_REPLIES:
+        reply, source, category = FAST_INTENT_REPLIES[regex_intent]
+        return jsonify({"reply": reply, "source": source, "category": category})
+
     # === 1.5 UNDERSTAND 语义归一化 ===
     understand = {"normalized_intent": question, "possible_scene": "", "risk_hint": "none", "emotion": ""}
     if understand_svc:
@@ -310,14 +319,7 @@ def chat():
                     question = understand["normalized_intent"]
         except:
             pass
-
-    # === 1b. 快速过滤 ===
-    regex_intent = IntentDetector.detect(question)
-    if regex_intent in FAST_INTENT_REPLIES:
-        reply, source, category = FAST_INTENT_REPLIES[regex_intent]
-        return jsonify({"reply": reply, "source": source, "category": category})
-
-        # 过度联想检查（在历史记录可用之后）
+    # 过度联想检查（在历史记录可用之后）
     over_assoc_warn = ""
     for symptom, rule in OVER_ASSOCIATION_BLOCK.items():
         if symptom in question:
@@ -344,10 +346,12 @@ def chat():
 
     # === 4. 风险识别 ===
     risk = {"level": 1, "label": "普通", "needs_ticket": False, "reason": "", "safety_prefix": ""}
+    # 人工服务/退款/投诉等非安全意图，跳过LLM风险升级
+    skip_llm_risk = regex_intent in ("transfer", "refund", "complaint", "greeting", "identity")
     kw = detect_emergency(question)
     if kw["level"] >= 2:
         risk = {"level": kw["level"], "label": kw["risk_label"], "needs_ticket": kw["level"] == 3, "reason": kw.get("reason",""), "safety_prefix": kw.get("reply","")}
-    elif risk_svc:
+    elif risk_svc and not skip_llm_risk:
         comp = risk_svc.compare_with_keyword(question, kw)
         if comp["verdict"] == "llm_upgrade":
             risk = {"level": comp["final_level"], "label": comp["final_level_label"], "needs_ticket": comp["final_level"] >= 3, "reason": comp.get("llm_risk",{}).get("risk_reason","") if comp.get("llm_risk") else "", "safety_prefix": ""}
