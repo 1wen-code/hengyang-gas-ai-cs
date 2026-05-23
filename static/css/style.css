@@ -1018,30 +1018,81 @@ body {
    响应式（手机端）
    ═══════════════════════════════════════════════ */
 @media (max-width: 768px) {
-    .sidebar {
-        position: fixed;
-        left: -280px;
-        top: 0;
-        width: min(85vw, 320px);
-        height: 100vh;
-        z-index: 100;
-        transition: left var(--transition-normal);
-        box-shadow: var(--shadow-lg);
+    /* ====== 全局防溢出 ====== */
+    html, body {
+        overflow-x: hidden;
+        max-width: 100vw;
+        position: relative;
     }
 
-    .sidebar.mobile-open { left: 0; }
+    .chat-main {
+        max-width: 100vw;
+        overflow-x: hidden;
+        position: relative;
+    }
 
+    /* ====== 侧边栏 — 抽屉模式 (transform GPU动画) ====== */
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 78vw;
+        max-width: 320px;
+        height: 100vh;
+        height: 100dvh;
+        z-index: 999;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        box-shadow: none;
+        display: flex;
+    }
+
+    .sidebar.mobile-open {
+        transform: translateX(0);
+        box-shadow: 4px 0 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .sidebar.collapsed {
+        width: 78vw;
+        max-width: 320px;
+        min-width: 0;
+        transform: translateX(-100%);
+    }
+
+    .sidebar-history {
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .history-item-title {
+        white-space: normal;
+        word-break: break-all;
+        line-height: 1.3;
+    }
+
+    /* ====== 遮罩层 ====== */
     .sidebar-overlay {
         display: none;
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.5);
-        z-index: 99;
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
+        z-index: 998;
     }
 
     .sidebar-overlay.show { display: block; }
 
-    .mobile-tickets-link { display: block; }
+    /* ====== 顶部栏 — 手机端简化 ====== */
+    .chat-header {
+        height: 48px;
+        flex-shrink: 0;
+        flex-wrap: nowrap;
+        overflow: hidden;
+        padding: 0 10px;
+        gap: 6px;
+    }
+
+    .mobile-hide { display: none !important; }
 
     .toggle-sidebar-btn {
         min-width: 44px;
@@ -1052,15 +1103,60 @@ body {
     .toggle-sidebar-btn svg { width: 24px; height: 24px; }
     .toggle-sidebar-btn::after { content: '历史'; font-size: 11px; margin-left: 4px; }
 
-    .status-bar { gap: 3px; flex-wrap: wrap; }
-    .status-capsule { padding: 2px 6px; font-size: 8px; gap: 3px; }
-    .status-capsule .dot { width: 5px; height: 5px; }
-    .header-info { display: none; }
+    .status-bar {
+        gap: 0;
+        flex: 1;
+        flex-wrap: nowrap;
+        overflow: hidden;
+        justify-content: flex-start;
+    }
+
+    .status-capsule {
+        padding: 2px 8px;
+        font-size: 10px;
+        gap: 4px;
+        white-space: nowrap;
+    }
+
+    .status-capsule .dot { width: 6px; height: 6px; }
+
+    .header-info {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
+    .header-title {
+        font-size: var(--font-sm);
+        white-space: nowrap;
+    }
+
+    .header-status {
+        font-size: 10px;
+        white-space: nowrap;
+    }
+
+    .mobile-tickets-link { display: block; flex-shrink: 0; }
+
+    /* ====== 消息区 ====== */
+    .chat-messages {
+        padding-bottom: 8px;
+    }
 
     .message { padding: 12px 10px; }
 
     .message.user .message-body,
     .message.bot .message-body { max-width: 90%; }
+
+    .message-content { max-width: 100%; }
+
+    /* ====== 欢迎页 ====== */
+    .welcome-screen { padding: 20px 10px; }
+    .welcome-screen h2 { font-size: var(--font-lg); }
+    .welcome-subtitle { font-size: var(--font-sm); margin-bottom: 20px; }
+    .welcome-logo { width: 56px; height: 56px; }
 
     .quick-entry-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
     .quick-entry-card { padding: 12px 8px; }
@@ -1071,12 +1167,17 @@ body {
     .status-card { padding: 10px 8px; }
     .status-card-value { font-size: var(--font-lg); }
 
-    .welcome-screen { padding: 20px 10px; }
-    .welcome-screen h2 { font-size: var(--font-lg); }
-    .welcome-subtitle { font-size: var(--font-sm); margin-bottom: 20px; }
-    .welcome-logo { width: 56px; height: 56px; }
-
-    .chat-input-area { padding: 8px 8px; padding-bottom: max(8px, env(safe-area-inset-bottom, 8px)); }
+    /* ====== 输入区 — 固定底部防止偏移 ====== */
+    .chat-input-area {
+        position: sticky;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        padding: 8px 8px;
+        padding-bottom: max(8px, env(safe-area-inset-bottom, 8px));
+        z-index: 10;
+        flex-shrink: 0;
+    }
 
     .input-wrapper {
         border-radius: var(--radius-xl);
@@ -1097,12 +1198,12 @@ body {
     .input-hint { font-size: 9px; margin-top: 4px; }
     .ai-first-hint { font-size: 9px; padding: 0 0 4px; }
 
-    .quick-replies { padding: 6px 8px 6px 10px; }
-    .quick-reply-btn { padding: 5px 10px; font-size: 11px; }
+    /* ====== 追问按钮 ====== */
+    .quick-replies { padding: 6px 8px 6px 10px; flex-wrap: wrap; }
+    .quick-reply-btn { padding: 5px 10px; font-size: 11px; white-space: nowrap; }
 
-    .message-content { max-width: 100%; }
-
+    /* ====== 其他 ====== */
     .transfer-btn { padding: 6px 10px; font-size: var(--font-xs); }
-
     #voiceBtn { width: 34px; height: 34px; }
+    .message-content { max-width: 100%; }
 }
