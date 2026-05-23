@@ -244,6 +244,7 @@ def chat():
                    "standard_question": biz["standard_question"], "category": biz["category"]},
         "emotion": emotion,
         "fuzzy": fuzzy,
+        "risk_locked": risk_locked,
         "session_state": {"current": state_result.get("new_state", "normal"), "previous": prev_state, "should_confirm_safety": state_result.get("should_confirm_safety", False)},
         "risk": {"level": risk["level"], "label": risk["label"], "reason": risk["reason"]},
         "classification": classification,
