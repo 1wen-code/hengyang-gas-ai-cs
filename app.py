@@ -129,7 +129,7 @@ def chat():
     question = data["message"].strip()
     if not question:
         return jsonify({"error": "消息不能为空"}), 400
-    client_history = data.get("history", [])
+    client_history = data.get("history") or []
     client_ip = request.headers.get("X-Forwarded-For", request.remote_addr) or ""
     if client_ip == "127.0.0.1":
         client_ip = request.remote_addr or ""
@@ -137,6 +137,7 @@ def chat():
     
     history = []  # 初始化，后续在上下文记忆中赋值
     # === 0. 状态机优先判断 ===
+    server_memory = session.get("conversation_memory", [])
     try:
         conversation_state = session.get("conversation_state", {}) or {}
     except:
@@ -188,6 +189,60 @@ def chat():
         "risk_active": risk_active,
         "safe_confirm_count": safe_confirm_count,
     }
+
+    # === 0.3 恢复确认 / 会话收尾状态 ===
+    # 用户对AI安全追问作出确认回复时，不走后续管道，直接收尾
+    recovery_words = [
+        "处理好了", "已经好了", "没事了", "修好了", "解决了",
+        "已处理", "搞定了", "没问题了", "正常了", "都好了",
+        "消除了", "排除了", "不打火了", "不响了", "不臭了",
+        "没闻到", "没味了", "没味道了", "关好了", "通风了",
+    ]
+    is_recovery = any(w in question for w in recovery_words)
+
+    # 检查上一轮AI是否在追问安全状态/收尾确认
+    last_ai_was_asking = False
+    for m in reversed(server_memory or []):
+        if m.get("role") == "assistant":
+            ai_text = m.get("content", "")
+            ask_kw = ["处理好了", "现在情况", "是否还有", "现在感觉", "请确认",
+                      "现在呢", "有没有味", "还有没有", "还闻到", "还在漏",
+                      "现在怎么样", "处理掉了吗", "排除了吗", "还臭吗"]
+            if any(kw in ai_text for kw in ask_kw):
+                last_ai_was_asking = True
+            break
+
+    if is_recovery and (risk_locked or risk_active or last_ai_was_asking):
+        recovery_reply = (
+            "好的，处理好了就行。\n\n"
+            "后续如果再次闻到燃气异味、报警器响、或者火焰异常，"
+            "建议立即关闭阀门并联系燃气公司 **0734-8677777**。\n\n"
+            "还有其他燃气问题我也可以继续帮您。"
+        )
+        session["conversation_state"] = {
+            "awaiting_option": False,
+            "fault_type": "",
+            "risk_active": False,
+            "safe_confirm_count": 0,
+        }
+        session["risk_locked"] = False
+        session["current_topic"] = ""
+        session["previous_faq_question"] = ""
+        # 保存回复到会话记忆
+        server_memory.append({"role": "user", "content": question})
+        server_memory.append({"role": "assistant", "content": recovery_reply})
+        session["conversation_memory"] = server_memory[-20:]
+        return jsonify({
+            "reply": recovery_reply,
+            "source": "guide",
+            "category": "安全用气",
+            "risk_level": "普通",
+            "risk_code": 1,
+            "intent": {"regex_intent": "recovery", "real_intent": "安全确认回复",
+                       "standard_question": "用户确认安全问题已处理", "category": "安全用气"},
+            "risk": {"level": 1, "label": "普通", "reason": "用户确认风险已解除"},
+            "search": {"faq_hit": False, "policy_hit": False, "best_score": 0.0, "top1_score": 0.0},
+        })
 
     # 模糊词替换：方言口语 → 标准故障标签
     fuzzy_hits = []
