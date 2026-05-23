@@ -182,13 +182,14 @@ def chat():
 
     # 模糊描述：强制追问，不输出维修步骤
     if fuzzy.get("is_fuzzy"):
+        fuzzy_r = None
         if ai:
-            r = ai.ask_with_rag(question=question, kb_contexts=search["top_k"], history=history,
+            fuzzy_r = ai.ask_with_rag(question=question, kb_contexts=search["top_k"], history=history,
                                 standard_question=biz["standard_question"], category=biz["category"],
-                                match_score=0.0)  # 传0分强制追问模式
-        if not r:
-            r = fuzzy.get("suggested_question", "") or "请详细描述一下您遇到的问题，比如是什么设备、出现了什么现象？"
-        reply_text, reply_source, reply_meta = r, "ai_rag", {"rag_count": len(search["top_k"]), "fuzzy_intercept": True}
+                                match_score=0.0)
+        if not fuzzy_r:
+            fuzzy_r = fuzzy.get("suggested_question", "") or "请详细描述一下您遇到的问题，比如是什么设备、出现了什么现象？"
+        reply_text, reply_source, reply_meta = fuzzy_r, "ai_rag", {"rag_count": len(search["top_k"]), "fuzzy_intercept": True}
     elif faq_ok:
         f = search["faq"]
         reply_text, reply_source = f["answer"], "faq"
