@@ -1014,7 +1014,6 @@ class IntentClassifierService:
                 ],
                 temperature=0.0,
                 max_tokens=150,
-                response_format={"type": "json_object"},
             )
             raw = resp.choices[0].message.content.strip()
             return self._parse(raw)
@@ -1022,8 +1021,12 @@ class IntentClassifierService:
             return self._default()
 
     def _parse(self, raw: str) -> dict:
-        """解析 JSON 输出"""
-        import json
+        """解析 JSON 输出（容错 Markdown 代码块包裹）"""
+        import json, re
+        # 剥离可能的 ```json ... ``` 包裹
+        m = re.search(r'\{[\s\S]*\}', raw)
+        if m:
+            raw = m.group(0)
         try:
             data = json.loads(raw)
             return {
