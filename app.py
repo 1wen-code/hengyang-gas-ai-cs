@@ -276,10 +276,23 @@ def chat():
     followup_subtype = FollowUpSubtypeDetector.detect(question)
 
     # === 1. 上下文记忆 ===
-    server_memory = session.get("conversation_memory", [])
+    # 新会话（客户端无历史）→ 清空服务端记忆，防止跨会话污染
+    if not client_history:
+        session.pop("conversation_memory", None)
+        session.pop("current_topic", None)
+        session.pop("previous_faq_question", None)
+        session.pop("previous_faq_answer", None)
+        session.pop("conversation_state", None)
+        session.pop("risk_locked", None)
+        server_memory = []
+    else:
+        server_memory = session.get("conversation_memory", [])
     seen = set()
-    merged = []
-    for m in server_memory + client_history:
+    merged = list(client_history)  # 客户端历史优先
+    for m in merged:
+        k = (m.get("role",""), m.get("content","")[:80])
+        seen.add(k)
+    for m in server_memory:
         k = (m.get("role",""), m.get("content","")[:80])
         if k not in seen:
             seen.add(k); merged.append(m)
