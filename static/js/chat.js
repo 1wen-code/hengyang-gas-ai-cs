@@ -1,5 +1,5 @@
 /**
- * 衡阳市天然气有限责任公司 AI 客服 — 前端聊天逻辑
+ * 衡阳市天然气有限责任公司 AI 客服 — 企业级前端交互逻辑
  */
 (function () {
     "use strict";
@@ -13,12 +13,15 @@
     const toggleSidebar = document.getElementById("toggleSidebar");
     const sidebar = document.getElementById("sidebar");
     const historyList = document.getElementById("historyList");
+    const transferBtn = document.getElementById("transferBtn");
 
     // ── 状态 ───────────────────────────────────────
     let isWaiting = false;
     let currentChatId = Date.now();
     let chatHistory = [];
     let conversations = {};
+    let transferFailCount = 0;
+    let thinkingInterval = null;
 
     // ── 来源标签映射 ───────────────────────────────
     const SOURCE_LABELS = {
@@ -35,48 +38,63 @@
         emotion: "情绪安抚",
         complaint: "投诉受理",
         error: "系统错误",
+        warning: "风险提醒",
     };
 
-    // ── 风险警告横幅（二级黄色 / 三级红色）──────
-    function showEmergencyBanner(riskLevel, riskCode, ticketId) {
-        // 移除旧横幅
-        var oldBanner = document.getElementById("emergencyBanner");
-        if (oldBanner) { oldBanner.remove(); }
+    // ── 来源→分类映射 ───────────────────────────────
+    const SOURCE_CATEGORY = {
+        emergency: "cat-emergency",
+        warning: "cat-emergency",
+        guide: "cat-guide",
+        knowledge_base: "cat-other",
+        ai_rag: "cat-other",
+        greeting: "cat-guide",
+        transfer: "cat-other",
+    };
 
-        var banner = document.createElement("div");
+    // ── AI思考状态文字 ──────────────────────────────
+    const THINKING_STATES = [
+        "正在分析问题...",
+        "正在检索知识库...",
+        "正在匹配燃气法规...",
+    ];
+
+    // ── 风险警告横幅 ───────────────────────────────
+    function showEmergencyBanner(riskLevel, riskCode, ticketId) {
+        const oldBanner = document.getElementById("emergencyBanner");
+        if (oldBanner) oldBanner.remove();
+
+        const banner = document.createElement("div");
         banner.id = "emergencyBanner";
 
-        // 三级红色 / 二级黄色
-        var isHigh = (riskCode === 3);
-        var bgColor = isHigh ? "#dc2626" : "#d97706";
-        var icon = isHigh ? "⚠" : "⚡";
-        var label = isHigh ? "高危紧急" : "疑似风险";
-        var actionText = isHigh ? "系统已强制转人工" : "建议检查并联系人工";
+        const isHigh = (riskCode === 3);
+        banner.className = "risk-banner" + (isHigh ? "" : " warning");
 
-        banner.style.cssText = "background:" + bgColor + ";color:#fff;padding:12px 16px;margin:0;font-size:14px;display:flex;align-items:center;gap:8px;" +
-            (isHigh ? "animation:emergency-pulse 1.5s ease-in-out infinite;" : "");
-        banner.innerHTML = '<span style="font-size:20px;">' + icon + '</span> <strong>检测到燃气安全风险 [' + (riskLevel || '警告') + ']</strong> — ' + actionText;
+        const icon = isHigh ? "⚠️" : "⚡";
+        const label = isHigh ? "检测到燃气安全高风险" : "检测到疑似风险";
+        const actionText = isHigh ? "系统已自动生成工单并转人工" : "建议检查并联系人工";
+
+        let html = '<span class="risk-icon">' + icon + '</span>';
+        html += '<strong>' + label + '</strong> — ' + actionText;
         if (ticketId) {
-            banner.innerHTML += ' <span style="opacity:0.8;font-size:12px;">工单：' + ticketId + '</span>';
+            html += ' <span style="opacity:0.8;font-size:11px;">工单：' + ticketId + '</span>';
         }
-        banner.innerHTML += '<button onclick="this.parentElement.remove()" style="margin-left:auto;background:none;border:none;color:#fff;cursor:pointer;font-size:18px;">✕</button>';
+        html += '<button class="risk-close" onclick="this.parentElement.remove()">✕</button>';
+        banner.innerHTML = html;
 
-        var header = document.querySelector(".chat-header");
+        const header = document.querySelector(".chat-header");
         if (header) {
             header.parentNode.insertBefore(banner, header.nextSibling);
         }
     }
 
-    // ── 紧急脉冲动画 ──────────────────────────────
-    var emStyle = document.createElement("style");
-    emStyle.textContent = "@keyframes emergency-pulse{0%,100%{opacity:1}50%{opacity:0.7}}";
-    document.head.appendChild(emStyle);
-
     // ── 初始化 ─────────────────────────────────────
     function init() {
+        loadTheme();
         loadConversations();
         bindEvents();
         autoResizeInput();
+        updateSystemStats();
     }
 
     function bindEvents() {
@@ -89,24 +107,31 @@
         newChatBtn.addEventListener("click", startNewChat);
         toggleSidebar.addEventListener("click", function () {
             if (window.innerWidth <= 768) {
-                // 手机端：滑出侧边栏
                 sidebar.classList.toggle("mobile-open");
                 toggleOverlay();
             } else {
                 sidebar.classList.toggle("collapsed");
             }
         });
-        document.querySelectorAll(".suggestion-btn").forEach(function (btn) {
+        // 快捷入口卡片
+        document.querySelectorAll(".suggestion-btn, .quick-entry-card").forEach(function (btn) {
             btn.addEventListener("click", function () {
                 sendMessage(btn.dataset.msg);
             });
         });
+        // 转人工按钮
+        if (transferBtn) {
+            transferBtn.addEventListener("click", function(e) {
+                e.preventDefault();
+                sendMessage("转人工客服");
+            });
+        }
     }
 
     // ── 发送 ───────────────────────────────────────
     function handleSend() {
         if (isWaiting) return;
-        var text = messageInput.value.trim();
+        const text = messageInput.value.trim();
         if (!text) return;
         sendMessage(text);
     }
@@ -125,8 +150,14 @@
         autoResizeInput();
         updateSendButton();
 
+        // 转人工检测
+        const isTransferRequest = /转人工|人工客服|人工服务|找人工|我要找人/.test(text);
+        if (isTransferRequest) {
+            transferFailCount = 0;
+        }
+
         appendMessage("user", text);
-        var typingEl = appendTyping();
+        const typingEl = appendTyping();
 
         fetch("/api/chat", {
             method: "POST",
@@ -145,44 +176,53 @@
                 if (data.error) {
                     appendMessage("bot", "抱歉，系统出现错误：" + data.error, "error");
                 } else {
-                    // 风险事件：显示颜色警告横幅
-                    var riskLevel = (data.risk && data.risk.level >= 2) ? data.risk.level : null;
-                    if (riskLevel || data.source === "emergency" || data.source === "warning") {
-                        var riskLabel = (data.risk && data.risk.label) || data.risk_level || "警告";
-                        var riskCode = riskLevel || data.risk_code || 2;
-                        var ticketId = data.ticket || data.ticket_id || null;
+                    // 风险事件
+                    const riskLevel = (data.risk && data.risk.level >= 2) ? data.risk.level : null;
+                    const isRisk = riskLevel || data.source === "emergency" || data.source === "warning";
+                    if (isRisk) {
+                        const riskLabel = (data.risk && data.risk.label) || data.risk_level || "警告";
+                        const riskCode = riskLevel || data.risk_code || 2;
+                        const ticketId = data.ticket || data.ticket_id || null;
                         showEmergencyBanner(riskLabel, riskCode, ticketId);
                     }
-                    var msgDiv = appendMessage(
-                        "bot",
-                        data.reply,
-                        data.source,
-                        data.match_question,
-                        data.category,
-                        data.law_basis,
-                        data.rag_count
+
+                    // 构建消息 class
+                    let extraClass = "";
+                    if (data.source === "emergency" || data.source === "warning" || (data.risk && data.risk.level >= 2)) {
+                        extraClass = "risk-high";
+                    }
+
+                    const msgDiv = appendMessage(
+                        "bot", data.reply, data.source,
+                        data.match_question, data.category,
+                        data.law_basis, data.rag_count, extraClass
                     );
-                    // 快捷追问按钮
+
                     if (data.source) {
                         addQuickReplies(data.source, msgDiv);
                     }
+
+                    // 转人工条件判断
+                    evaluateTransferVisibility(data);
                 }
                 saveMessage("user", text);
                 saveMessage("bot", data.reply, data.source,
                     data.match_question, data.category);
                 updateHistoryItem(text);
+                updateSystemStats();
             })
             .catch(function () {
                 removeTyping(typingEl);
+                transferFailCount++;
                 appendMessage("bot",
                     "网络连接异常，请稍后重试。紧急情况请拨打 24 小时客服热线 0734-8677777。",
                     "error");
+                evaluateTransferVisibility(null);
             })
             .finally(function () {
                 isWaiting = false;
                 updateSendButton();
                 scrollToBottom();
-                // 手机端恢复焦点，确保后续输入能触发按钮更新
                 setTimeout(function() {
                     messageInput.focus();
                     messageInput.dispatchEvent(new Event("input"));
@@ -190,57 +230,86 @@
             });
     }
 
+    // ── 转人工条件判断 ──────────────────────────────
+    function evaluateTransferVisibility(data) {
+        if (!transferBtn) return;
+
+        let shouldShow = false;
+
+        // 条件1: 响应明确要求转人工
+        if (data && (data.source === "transfer" || data.source === "emergency")) {
+            shouldShow = true;
+        }
+        // 条件2: 连续3次无法理解
+        if (transferFailCount >= 3) {
+            shouldShow = true;
+        }
+        // 条件3: 高危风险
+        if (data && data.risk && data.risk.level >= 3) {
+            shouldShow = true;
+        }
+        // 条件4: AI拒绝回答
+        if (data && data.source === "reject") {
+            shouldShow = true;
+        }
+
+        if (shouldShow) {
+            transferBtn.classList.add("visible");
+        }
+    }
+
     // ── 消息渲染 ───────────────────────────────────
-    function appendMessage(role, content, source, matchQuestion, category, lawBasis, ragCount) {
-        var div = document.createElement("div");
+    function appendMessage(role, content, source, matchQuestion, category, lawBasis, ragCount, extraClass) {
+        const div = document.createElement("div");
         div.className = "message " + role;
         if (source === "transfer" || source === "error" || source === "reject") {
             div.classList.add(source);
         }
+        if (extraClass) {
+            div.classList.add(extraClass);
+        }
 
-        // 头像
-        var avatar = document.createElement("div");
+        const avatar = document.createElement("div");
         avatar.className = "message-avatar";
         avatar.textContent = role === "user" ? "我" : "衡";
 
-        // 消息体
-        var body = document.createElement("div");
+        const body = document.createElement("div");
         body.className = "message-body";
 
-        var msgContent = document.createElement("div");
+        const msgContent = document.createElement("div");
         msgContent.className = "message-content";
         msgContent.innerHTML = renderContent(content);
         body.appendChild(msgContent);
 
         // 元数据
         if (source && role === "bot") {
-            var meta = document.createElement("div");
+            const meta = document.createElement("div");
             meta.className = "message-meta";
 
-            var label = SOURCE_LABELS[source] || source;
+            const label = SOURCE_LABELS[source] || source;
 
-            var tag = document.createElement("span");
+            const tag = document.createElement("span");
             tag.className = "source-tag " + source;
             tag.textContent = label;
             meta.appendChild(tag);
 
             if (ragCount && ragCount > 0) {
-                var ragSpan = document.createElement("span");
+                const ragSpan = document.createElement("span");
                 ragSpan.textContent = "上下文：" + ragCount + " 条";
                 meta.appendChild(ragSpan);
             }
             if (matchQuestion) {
-                var matchSpan = document.createElement("span");
+                const matchSpan = document.createElement("span");
                 matchSpan.textContent = "匹配：" + matchQuestion;
                 meta.appendChild(matchSpan);
             }
             if (category) {
-                var catSpan = document.createElement("span");
+                const catSpan = document.createElement("span");
                 catSpan.textContent = "分类：" + category;
                 meta.appendChild(catSpan);
             }
             if (lawBasis) {
-                var lawSpan = document.createElement("span");
+                const lawSpan = document.createElement("span");
                 lawSpan.style.color = "var(--text-muted)";
                 lawSpan.textContent = "依据：" + lawBasis;
                 meta.appendChild(lawSpan);
@@ -257,25 +326,52 @@
     }
 
     function appendTyping() {
-        var div = document.createElement("div");
+        const div = document.createElement("div");
         div.className = "message bot";
 
-        var avatar = document.createElement("div");
+        const avatar = document.createElement("div");
         avatar.className = "message-avatar bot-avatar";
         avatar.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>';
 
-        var body = document.createElement("div");
+        const body = document.createElement("div");
         body.className = "message-body";
-        body.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
 
+        const indicator = document.createElement("div");
+        indicator.className = "typing-indicator";
+
+        const dots = document.createElement("div");
+        dots.className = "typing-dots";
+        dots.innerHTML = "<span></span><span></span><span></span>";
+        indicator.appendChild(dots);
+
+        const thinkText = document.createElement("span");
+        thinkText.className = "thinking-text";
+        thinkText.textContent = THINKING_STATES[0];
+        indicator.appendChild(thinkText);
+
+        body.appendChild(indicator);
         div.appendChild(avatar);
         div.appendChild(body);
         chatMessages.appendChild(div);
+
+        // 循环切换思考文字
+        let idx = 0;
+        thinkingInterval = setInterval(function() {
+            idx = (idx + 1) % THINKING_STATES.length;
+            thinkText.textContent = THINKING_STATES[idx];
+        }, 1800);
+
+        // 存储interval到元素上以便清理
+        div._thinkingInterval = thinkingInterval;
+
         scrollToBottom();
         return div;
     }
 
     function removeTyping(el) {
+        if (el && el._thinkingInterval) {
+            clearInterval(el._thinkingInterval);
+        }
         if (el && el.parentNode) {
             el.parentNode.removeChild(el);
         }
@@ -284,7 +380,7 @@
     // ── 简单 Markdown ──────────────────────────────
     function renderContent(text) {
         if (!text) return "";
-        var html = escapeHtml(text);
+        let html = escapeHtml(text);
         html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
         html = html.replace(/\n\n/g, "<br><br>");
         html = html.replace(/\n/g, "<br>");
@@ -292,7 +388,7 @@
     }
 
     function escapeHtml(text) {
-        var div = document.createElement("div");
+        const div = document.createElement("div");
         div.textContent = text;
         return div.innerHTML;
     }
@@ -353,7 +449,7 @@
 
     function loadConversations() {
         try {
-            var raw = localStorage.getItem("hengyang_gas_chats");
+            const raw = localStorage.getItem("hengyang_gas_chats");
             if (raw) { conversations = JSON.parse(raw); }
         } catch (e) {
             conversations = {};
@@ -361,15 +457,80 @@
         renderHistoryList();
     }
 
+    // ── 相对时间 ───────────────────────────────────
+    function relativeTime(ts) {
+        const diff = Date.now() - ts;
+        const sec = Math.floor(diff / 1000);
+        if (sec < 60) return "刚刚";
+        const min = Math.floor(sec / 60);
+        if (min < 60) return min + "分钟前";
+        const hr = Math.floor(min / 60);
+        if (hr < 24) return hr + "小时前";
+        const d = new Date(ts);
+        if (hr < 48) return "昨天";
+        return (d.getMonth() + 1) + "/" + d.getDate();
+    }
+
     // ── 历史列表 ───────────────────────────────────
     function renderHistoryList() {
         historyList.innerHTML = "";
-        var ids = Object.keys(conversations).sort(function (a, b) { return b - a; });
+        const ids = Object.keys(conversations).sort(function (a, b) { return b - a; });
+
+        if (ids.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "sidebar-history-empty";
+            empty.textContent = "暂无历史对话";
+            historyList.appendChild(empty);
+            return;
+        }
+
         ids.forEach(function (id) {
-            var conv = conversations[id];
-            var item = document.createElement("div");
+            const conv = conversations[id];
+            const item = document.createElement("div");
             item.className = "history-item" + (Number(id) === currentChatId ? " active" : "");
-            item.textContent = conv.title || "新对话";
+
+            // 推测分类
+            let catClass = "cat-other";
+            let catLabel = "";
+            if (conv.messages && conv.messages.length > 0) {
+                for (let i = 0; i < conv.messages.length; i++) {
+                    const s = conv.messages[i].source;
+                    if (s === "emergency") { catClass = "cat-emergency"; catLabel = "高危"; break; }
+                    if (s === "warning") { catClass = "cat-emergency"; catLabel = "风险"; break; }
+                    if (s === "guide") { catClass = "cat-guide"; catLabel = "业务"; break; }
+                    if (s === "greeting") { catClass = "cat-guide"; catLabel = "咨询"; break; }
+                }
+            }
+
+            // 找到最早用户消息时间
+            let msgTime = "";
+            if (conv.messages && conv.messages.length > 0) {
+                for (let i = 0; i < conv.messages.length; i++) {
+                    if (conv.messages[i].time) { msgTime = relativeTime(conv.messages[i].time); break; }
+                }
+            }
+
+            const titleSpan = document.createElement("span");
+            titleSpan.className = "history-item-title";
+            titleSpan.textContent = conv.title || "新对话";
+
+            const metaDiv = document.createElement("div");
+            metaDiv.className = "history-item-meta";
+
+            if (catLabel) {
+                const catSpan = document.createElement("span");
+                catSpan.className = "history-category " + catClass;
+                catSpan.textContent = catLabel;
+                metaDiv.appendChild(catSpan);
+            }
+
+            const timeSpan = document.createElement("span");
+            timeSpan.className = "history-time";
+            timeSpan.textContent = msgTime;
+            metaDiv.appendChild(timeSpan);
+
+            item.appendChild(titleSpan);
+            item.appendChild(metaDiv);
             item.addEventListener("click", function () { loadChat(Number(id)); });
             historyList.appendChild(item);
         });
@@ -397,95 +558,125 @@
                     msg.matchQuestion, msg.category);
             });
         }
+        transferFailCount = 0;
+        if (transferBtn) transferBtn.classList.remove("visible");
         renderHistoryList();
         scrollToBottom();
+        updateSystemStats();
     }
 
     function startNewChat() {
         if (isWaiting) return;
         currentChatId = Date.now();
         chatHistory = [];
+        transferFailCount = 0;
+        if (transferBtn) transferBtn.classList.remove("visible");
+        const oldBanner = document.getElementById("emergencyBanner");
+        if (oldBanner) oldBanner.remove();
+
         while (chatMessages.children.length > 0) {
             chatMessages.removeChild(chatMessages.firstChild);
         }
-        var welcomeDiv = document.createElement("div");
+
+        // 重建欢迎页
+        const welcomeDiv = document.createElement("div");
         welcomeDiv.className = "welcome-screen";
         welcomeDiv.id = "welcomeScreen";
-        welcomeDiv.innerHTML = welcomeScreen.innerHTML;
+        // 从原始HTML克隆欢迎内容
+        const origWelcome = document.querySelector(".welcome-screen");
+        if (origWelcome) {
+            welcomeDiv.innerHTML = origWelcome.innerHTML;
+        }
         chatMessages.appendChild(welcomeDiv);
-        chatMessages.querySelectorAll(".suggestion-btn").forEach(function (btn) {
+
+        // 重新绑定快捷入口
+        document.querySelectorAll(".suggestion-btn, .quick-entry-card").forEach(function (btn) {
             btn.addEventListener("click", function () {
                 sendMessage(btn.dataset.msg);
             });
         });
+
         conversations[currentChatId] = { title: "", messages: [] };
         persistConversations();
         renderHistoryList();
+        updateSystemStats();
         messageInput.focus();
     }
 
-    // ═══════════════════════════════════════════════
-    // 打字机效果
-    // ═══════════════════════════════════════════════
-    function typewriter(el, html, speed, callback) {
-        // Strip HTML for typing, then apply at end
-        var temp = document.createElement("div");
-        temp.innerHTML = html;
-        var text = temp.textContent || temp.innerText || "";
-        var i = 0;
-        el.textContent = "";
-        function type() {
-            if (i < text.length) {
-                el.textContent += text.charAt(i);
-                i++;
-                scrollToBottom();
-                setTimeout(type, speed || 20);
-            } else {
-                el.innerHTML = html; // Apply real HTML at end
-                if (callback) callback();
+    // ── 系统运行状态 ───────────────────────────────
+    function updateSystemStats() {
+        const statConsult = document.getElementById("statConsult");
+        const statRisk = document.getElementById("statRisk");
+        const statQueue = document.getElementById("statQueue");
+
+        if (!statConsult) return;
+
+        // 统计今日咨询
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayMs = today.getTime();
+        let todayCount = 0;
+        let riskCount = 0;
+
+        Object.keys(conversations).forEach(function(id) {
+            const conv = conversations[id];
+            if (conv.messages) {
+                conv.messages.forEach(function(m) {
+                    if (m.time && m.time >= todayMs && m.role === "user") {
+                        todayCount++;
+                    }
+                    if (m.time && m.time >= todayMs && (m.source === "emergency" || m.source === "warning")) {
+                        riskCount++;
+                    }
+                });
             }
+        });
+
+        statConsult.textContent = todayCount || "--";
+        statRisk.textContent = riskCount || "--";
+
+        // 人工排队（模拟）
+        if (statQueue) {
+            const hr = new Date().getHours();
+            const queue = (hr >= 9 && hr <= 18) ? Math.floor(Math.random() * 5) + 1 : 0;
+            statQueue.textContent = queue > 0 ? queue + "人" : "0人";
         }
-        type();
     }
 
     // ═══════════════════════════════════════════════
     // 快捷追问按钮
     // ═══════════════════════════════════════════════
-    var QUICK_REPLIES = {
+    const QUICK_REPLIES = {
         greeting: ['燃气开户', '燃气缴费', '收费标准', '燃气泄漏怎么办'],
         identity: ['如何开户', '怎么缴费', '燃气报修', '安全检查'],
         guide: ['居民开户', '商业开户', '燃气过户', '故障报修'],
-        faq: ['需要什么材料', '多少钱', '多久能办好', '转人工'],
+        faq: ['需要什么材料', '多少钱', '多久能办好'],
         transfer: ['如何开户', '燃气缴费', '收费标准'],
-        default: ['如何办理开户', '怎么缴纳燃气费', '燃气泄漏怎么办', '转人工客服'],
+        default: ['如何办理开户', '怎么缴纳燃气费', '燃气泄漏怎么办'],
     };
 
     function addQuickReplies(source, msgDiv) {
-        // Remove old quick replies
-        var old = document.querySelectorAll(".quick-replies");
+        const old = document.querySelectorAll(".quick-replies");
         old.forEach(function(el) { el.remove(); });
 
-        var replies = QUICK_REPLIES[source] || QUICK_REPLIES["default"];
-        var container = document.createElement("div");
+        const replies = QUICK_REPLIES[source] || QUICK_REPLIES["default"];
+        const container = document.createElement("div");
         container.className = "quick-replies";
-        container.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;padding:8px 40px 8px 86px;";
 
         replies.forEach(function(r) {
-            var btn = document.createElement("button");
+            const btn = document.createElement("button");
+            btn.className = "quick-reply-btn";
             btn.textContent = r;
-            btn.style.cssText = "padding:6px 14px;border:1px solid var(--border-color);border-radius:16px;background:transparent;color:var(--text-secondary);font-size:12px;cursor:pointer;transition:all 0.15s;";
-            btn.onmouseover = function() { this.style.background = "var(--bg-bot-msg)"; this.style.color = "var(--text-primary)"; };
-            btn.onmouseout = function() { this.style.background = "transparent"; this.style.color = "var(--text-secondary)"; };
-            btn.onclick = function() { sendMessage(r); };
+            btn.addEventListener("click", function() { sendMessage(r); });
             container.appendChild(btn);
         });
         msgDiv.parentNode.insertBefore(container, msgDiv.nextSibling);
     }
 
     // ═══════════════════════════════════════════════
-    // 语音输入 — 高级玻璃按钮（功能预留）
+    // 语音输入 — 玻璃按钮（功能预留）
     // ═══════════════════════════════════════════════
-    var voiceBtn = null;
+    let voiceBtn = null;
 
     function addVoiceButton() {
         if (voiceBtn) return;
@@ -501,37 +692,50 @@
             showVoiceToast();
         });
 
-        var inputWrapper = document.querySelector(".input-wrapper");
+        const inputWrapper = document.querySelector(".input-wrapper");
         if (inputWrapper) {
             inputWrapper.insertBefore(voiceBtn, inputWrapper.firstChild);
         }
     }
 
     function showVoiceToast() {
-        var old = document.querySelector(".voice-toast");
+        const old = document.querySelector(".voice-toast");
         if (old) old.remove();
 
-        var toast = document.createElement("div");
+        const toast = document.createElement("div");
         toast.className = "voice-toast";
-        toast.innerHTML = '<span style="font-size:18px;margin-right:6px;">🎤</span> 语音功能即将上线，当前版本请使用文字输入';
-        toast.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(22,33,62,0.95);color:#fff;padding:14px 24px;border-radius:30px;font-size:14px;z-index:9999;white-space:nowrap;border:1px solid rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 8px 32px rgba(0,0,0,0.4);animation:voice-toast-in 0.3s ease,voice-toast-out 0.3s ease 2.5s forwards;";
+        toast.textContent = "语音功能即将上线，请使用文字输入";
         document.body.appendChild(toast);
-        setTimeout(function() { toast.remove(); }, 3000);
+        setTimeout(function() {
+            toast.style.animation = "voice-toast-out 0.3s ease forwards";
+            setTimeout(function() { toast.remove(); }, 300);
+        }, 2500);
     }
 
     // ═══════════════════════════════════════════════
-    // 主题切换
+    // 主题切换 (data-theme)
     // ═══════════════════════════════════════════════
-    var isDark = true;
-    var themeBtn = null;
+    let isDark = true;
+    let themeBtn = null;
+
+    function loadTheme() {
+        try {
+            const saved = localStorage.getItem("hengyang_theme");
+            if (saved === "light") {
+                isDark = false;
+                document.documentElement.setAttribute("data-theme", "light");
+            }
+        } catch(e) {}
+    }
+
     function addThemeButton() {
         if (themeBtn) return;
         themeBtn = document.createElement("button");
         themeBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path></svg>';
         themeBtn.title = "切换主题";
-        themeBtn.style.cssText = "background:transparent;border:none;color:var(--text-secondary);cursor:pointer;padding:6px;border-radius:6px;";
-        themeBtn.onclick = toggleTheme;
-        var header = document.querySelector(".chat-header");
+        themeBtn.style.cssText = "background:transparent;border:none;color:var(--text-secondary);cursor:pointer;padding:6px;border-radius:6px;display:flex;align-items:center;";
+        themeBtn.addEventListener("click", toggleTheme);
+        const header = document.querySelector(".chat-header");
         if (header) {
             header.appendChild(themeBtn);
         }
@@ -539,88 +743,65 @@
 
     function toggleTheme() {
         isDark = !isDark;
-        var root = document.documentElement;
-        if (isDark) {
-            root.style.setProperty("--bg-primary", "#343541");
-            root.style.setProperty("--bg-secondary", "#202123");
-            root.style.setProperty("--bg-input", "#40414f");
-            root.style.setProperty("--bg-user-msg", "#343541");
-            root.style.setProperty("--bg-bot-msg", "#444654");
-            root.style.setProperty("--text-primary", "#ececf1");
-            root.style.setProperty("--text-secondary", "#c5c5d2");
-            root.style.setProperty("--text-muted", "#8e8ea0");
-        } else {
-            root.style.setProperty("--bg-primary", "#ffffff");
-            root.style.setProperty("--bg-secondary", "#f7f7f8");
-            root.style.setProperty("--bg-input", "#f0f0f0");
-            root.style.setProperty("--bg-user-msg", "#ffffff");
-            root.style.setProperty("--bg-bot-msg", "#f7f7f8");
-            root.style.setProperty("--text-primary", "#1a1a1a");
-            root.style.setProperty("--text-secondary", "#555");
-            root.style.setProperty("--text-muted", "#999");
-        }
+        document.documentElement.setAttribute("data-theme", isDark ? "dark" : "light");
+        try {
+            localStorage.setItem("hengyang_theme", isDark ? "dark" : "light");
+        } catch(e) {}
     }
 
     // ═══════════════════════════════════════════════
     // 导出聊天记录
     // ═══════════════════════════════════════════════
     function addExportButton() {
-        var btn = document.createElement("button");
+        const btn = document.createElement("button");
         btn.textContent = "导出";
         btn.title = "导出聊天记录";
-        btn.style.cssText = "background:transparent;border:1px solid var(--border-color);color:var(--text-secondary);cursor:pointer;padding:4px 10px;border-radius:4px;font-size:11px;margin-right:4px;";
-        btn.onclick = exportChat;
-        var header = document.querySelector(".chat-header");
-        if (header) {
-            header.appendChild(btn);
-        }
+        btn.style.cssText = "background:transparent;border:1px solid var(--border-color);color:var(--text-secondary);cursor:pointer;padding:4px 10px;border-radius:var(--radius-xs);font-size:11px;margin-right:4px;";
+        btn.addEventListener("click", exportChat);
+        const header = document.querySelector(".chat-header");
+        if (header) header.appendChild(btn);
     }
 
     function exportChat() {
-        var lines = [];
+        const lines = [];
         lines.push("衡阳市天然气AI客服 - 聊天记录");
         lines.push("导出时间: " + new Date().toLocaleString());
         lines.push("=".repeat(50));
         chatHistory.forEach(function(m) {
-            var role = m.role === "user" ? "用户" : "客服";
+            const role = m.role === "user" ? "用户" : "客服";
             lines.push("");
             lines.push("【" + role + "】 " + new Date(m.time).toLocaleTimeString());
             lines.push(m.content);
         });
-        var text = lines.join("\n");
-        var blob = new Blob([text], {type: "text/plain;charset=utf-8"});
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement("a");
+        const text = lines.join("\n");
+        const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
         a.href = url;
-        a.download = "燃气客服聊天记录_" + new Date().toISOString().slice(0,10) + ".txt";
+        a.download = "燃气客服聊天记录_" + new Date().toISOString().slice(0, 10) + ".txt";
         a.click();
         URL.revokeObjectURL(url);
     }
 
     // ═══════════════════════════════════════════════
-    // 演示路径按钮
+    // 演示路径
     // ═══════════════════════════════════════════════
     function addDemoButton() {
-        var btn = document.createElement("button");
+        const btn = document.createElement("button");
         btn.textContent = "演示";
         btn.title = "自动演示";
-        btn.style.cssText = "background:var(--accent);border:none;color:#fff;cursor:pointer;padding:4px 10px;border-radius:4px;font-size:11px;margin-right:4px;";
-        btn.onclick = runDemo;
-        var header = document.querySelector(".chat-header");
-        if (header) {
-            header.appendChild(btn);
-        }
+        btn.style.cssText = "background:var(--accent);border:none;color:#fff;cursor:pointer;padding:4px 10px;border-radius:var(--radius-xs);font-size:11px;margin-right:4px;";
+        btn.addEventListener("click", runDemo);
+        const header = document.querySelector(".chat-header");
+        if (header) header.appendChild(btn);
     }
 
-    var demoSteps = [
-        "你好",
-        "我要开户",
-        "需要什么材料",
-        "怎么交燃气费",
-        "燃气泄漏怎么办",
+    const demoSteps = [
+        "你好", "我要开户", "需要什么材料", "怎么交燃气费", "燃气泄漏怎么办",
     ];
+
     function runDemo() {
-        var i = 0;
+        let i = 0;
         function next() {
             if (i < demoSteps.length) {
                 sendMessage(demoSteps[i]);
@@ -641,7 +822,7 @@
     setTimeout(initExtensions, 500);
 
     // ── 手机侧边栏遮罩 ────────────────────────────
-    var overlay = null;
+    let overlay = null;
     function getOverlay() {
         if (!overlay) {
             overlay = document.createElement("div");
@@ -655,7 +836,7 @@
         return overlay;
     }
     function toggleOverlay() {
-        var ol = getOverlay();
+        const ol = getOverlay();
         if (sidebar.classList.contains("mobile-open")) {
             ol.classList.add("show");
         } else {
