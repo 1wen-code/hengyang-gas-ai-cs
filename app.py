@@ -310,20 +310,21 @@ def chat():
     # === 8. 相似度过滤 + 类别一致性 + AI自主判断 ===
     faq_ok = search["faq"] and search["faq"]["score"] >= 0.20
 
+    # 危险类别对：直接拒绝（同时用于二次检索安全检查）
+    danger_pairs = [
+        ("燃气泄漏", "燃气缴费"), ("燃气泄漏", "开户安装"),
+        ("安全用气", "燃气缴费"), ("安全用气", "开户安装"),
+        ("燃气缴费", "安全用气"), ("燃气缴费", "燃气泄漏"),
+        ("开户安装", "安全用气"), ("开户安装", "燃气泄漏"),
+        ("灶具维修", "燃气泄漏"), ("热水器故障", "燃气泄漏"),
+    ]
+
     if faq_ok:
         cls_cat = classification.get("category", "")
         cls_conf = classification.get("confidence", 0)
         faq_cat = search["faq"]["category"] if search["faq"] else ""
         faq_score = search["faq"]["score"]
 
-        # 危险类别对：直接拒绝
-        danger_pairs = [
-            ("燃气泄漏", "燃气缴费"), ("燃气泄漏", "开户安装"),
-            ("安全用气", "燃气缴费"), ("安全用气", "开户安装"),
-            ("燃气缴费", "安全用气"), ("燃气缴费", "燃气泄漏"),
-            ("开户安装", "安全用气"), ("开户安装", "燃气泄漏"),
-            ("灶具维修", "燃气泄漏"), ("热水器故障", "燃气泄漏"),
-        ]
         mismatch = any(
             (a in cls_cat and b in faq_cat) or (b in cls_cat and a in faq_cat)
             for a, b in danger_pairs
@@ -359,8 +360,43 @@ def chat():
             faq_ok = False
 
     # === 8.5 模糊语义拦截 ===
-    # Fuzzy detection handled by UNDERSTAND + FUZZY_MAP, skip LLM
     fuzzy = {"is_fuzzy": False, "reason": "", "suggested_question": ""}
+    if fuzzy_svc:
+        try:
+            fuzzy = fuzzy_svc.detect(question)
+        except:
+            pass
+
+    # === 8.6 意图理解二次搜索：FAQ未命中时用LLM提炼标准问题重新检索 ===
+    if not faq_ok and not search["policy"] and intent_svc:
+        try:
+            intent_result = intent_svc.understand(question)
+            if intent_result and intent_result.get("standard_question"):
+                sq2 = intent_result["standard_question"]
+                if sq2 and sq2 != question and sq2 != biz["standard_question"]:
+                    second_faq = kb.search_faq(sq2)
+                    if second_faq and second_faq.get("score", 0) >= 0.20:
+                        faq2_cat = second_faq.get("category", "")
+                        cls_cat2 = intent_result.get("category", "")
+                        # 类别安全检查
+                        clash = any(
+                            (a in cls_cat2 and b in faq2_cat) or (b in cls_cat2 and a in faq2_cat)
+                            for a, b in danger_pairs
+                        )
+                        if not clash:
+                            search["faq"] = second_faq
+                            faq_ok = True
+                    # 用提炼后的标准问题更新 top_k
+                    topk2 = kb.search_top_k(sq2, k=8)
+                    if topk2:
+                        search["top_k"] = topk2
+                        search["best_score"] = max(search["best_score"], topk2[0]["score"] if topk2 else 0)
+                if intent_result.get("category"):
+                    biz["category"] = intent_result["category"] or biz["category"]
+                if intent_result.get("real_intent"):
+                    biz["real_intent"] = intent_result["real_intent"]
+        except:
+            pass
 
     # === 9. DeepSeek生成 ===
     reply_text, reply_source, reply_meta = "", "guide", {}
