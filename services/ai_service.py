@@ -688,9 +688,6 @@ TICKET_GENERATION_PROMPT = """你是燃气AI客服系统中的工单生成模块
 
 输出格式（严格按此格式，不要多余文字）：
 
-【工单编号】
-（留空，由系统自动生成）
-
 【业务类型】
 xxx
 
@@ -792,31 +789,21 @@ class TicketGenerationService:
         suggestion = ""
         human_intervention = False
 
-        m = re.search(r"【工单编号】\s*(.+?)(?=【业务类型】|$)", response, re.DOTALL)
-        if m:
-            raw_id = m.group(1).strip()
-            if raw_id and raw_id != "（留空，由系统自动生成）":
-                ticket_id = raw_id
+        # 辅助函数：提取两个【标签】之间的内容
+        def _extract(text: str, tag: str, next_tag: str = "") -> str:
+            if next_tag:
+                m = re.search(rf"【{tag}】\s*(.+?)\s*\n【{next_tag}】", text, re.DOTALL)
+            else:
+                m = re.search(rf"【{tag}】\s*(.+?)$", text, re.DOTALL)
+            return m.group(1).strip() if m else ""
 
-        m = re.search(r"【业务类型】\s*(.+?)(?=【风险等级】|$)", response, re.DOTALL)
-        if m:
-            business_type = m.group(1).strip()
+        business_type = _extract(response, "业务类型", "风险等级")
+        risk_level = _extract(response, "风险等级", "问题摘要")
+        summary = _extract(response, "问题摘要", "处理建议")
+        suggestion = _extract(response, "处理建议", "是否人工介入")
 
-        m = re.search(r"【风险等级】\s*(.+?)(?=【问题摘要】|$)", response, re.DOTALL)
-        if m:
-            risk_level = m.group(1).strip()
-
-        m = re.search(r"【问题摘要】\s*(.+?)(?=【处理建议】|$)", response, re.DOTALL)
-        if m:
-            summary = m.group(1).strip()
-
-        m = re.search(r"【处理建议】\s*(.+?)(?=【是否人工介入】|$)", response, re.DOTALL)
-        if m:
-            suggestion = m.group(1).strip()
-
-        m = re.search(r"【是否人工介入】\s*(.+?)$", response, re.DOTALL)
-        if m:
-            human_intervention = "是" in m.group(1)
+        hi = _extract(response, "是否人工介入")
+        human_intervention = "是" in hi
 
         return {
             "ticket_id": ticket_id,
