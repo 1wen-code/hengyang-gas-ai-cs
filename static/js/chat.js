@@ -133,7 +133,7 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 message: text,
-                history: chatHistory.slice(-6).map(function(m) {
+                history: chatHistory.slice(-10).map(function(m) {
                     return { role: m.role === "user" ? "user" : "assistant", content: m.content };
                 }),
             }),

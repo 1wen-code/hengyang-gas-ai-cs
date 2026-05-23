@@ -313,8 +313,20 @@ def chat():
     if not question:
         return jsonify({"error": "消息不能为空"}), 400
 
-    history = data.get("history", [])
+    client_history = data.get("history", [])
     client_ip = request.remote_addr or ""
+
+    # ── 服务端会话记忆 ──────────────────────────
+    server_memory = session.get("conversation_memory", [])
+    # 合并：服务端记忆 + 客户端历史，去重后取最近20条
+    seen = set()
+    merged_history = []
+    for m in server_memory + client_history:
+        key = (m.get("role", ""), m.get("content", "")[:80])
+        if key not in seen:
+            seen.add(key)
+            merged_history.append(m)
+    history = merged_history[-20:]
 
     # Layer 1: 意图理解 AI
     intent = _layer1_intent(question)
@@ -335,6 +347,12 @@ def chat():
 
     # Layer 6: 返回响应
     response = _layer6_build_response(reply, intent, search, risk, ticket)
+
+    # ── 更新服务端记忆 ──────────────────────────
+    server_memory.append({"role": "user", "content": question})
+    server_memory.append({"role": "assistant", "content": reply["text"]})
+    session["conversation_memory"] = server_memory[-20:]
+
     return jsonify(response)
 
 
