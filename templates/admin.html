@@ -5,121 +5,279 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>衡阳燃气AI客服 - 管理后台</title>
     <style>
+        :root {
+            --bg: #0f172a; --card: #1e293b; --border: #334155;
+            --green: #22c55e; --red: #ef4444; --orange: #f59e0b;
+            --purple: #8b5cf6; --blue: #3b82f6; --text: #e2e8f0;
+            --muted: #94a3b8; --dimmer: #64748b;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, sans-serif; background: #1a1a2e; color: #eee; padding: 24px; }
-        h1 { font-size: 22px; margin-bottom: 24px; color: #19c37d; }
-        h2 { font-size: 16px; margin: 20px 0 12px; color: #a78bfa; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
-        .card { background: #16213e; border-radius: 12px; padding: 20px; text-align: center; }
-        .card .num { font-size: 36px; font-weight: 700; color: #19c37d; }
-        .card .label { font-size: 13px; color: #888; margin-top: 4px; }
-        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
-        button, .btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; }
-        .btn-green { background: #19c37d; color: #fff; }
-        .btn-purple { background: #7c3aed; color: #fff; }
-        .btn-red { background: #dc2626; color: #fff; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
-        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #2a2a4a; }
-        th { color: #a78bfa; font-weight: 600; }
-        .log { background: #0f0f23; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; color: #a0a0b0; }
+        body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); padding: 16px; line-height: 1.5; }
+
+        /* Nav */
+        .nav { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+        .nav a { color: var(--muted); text-decoration: none; font-size: 13px; }
+        .nav a:hover { color: var(--green); }
+        .nav .sep { color: var(--border); }
+        .nav .ver { color: var(--dimmer); font-size: 12px; }
+
+        /* Page title */
+        h1 { font-size: 20px; margin-bottom: 16px; color: var(--green); }
+
+        /* Status bar */
+        .status-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+        .status-dot { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 12px; color: var(--muted); }
+        .status-dot .dot { width: 8px; height: 8px; border-radius: 50%; }
+        .dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+        .dot-orange { background: var(--orange); box-shadow: 0 0 6px var(--orange); }
+
+        /* Stat cards */
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+        .stat-card .num { font-size: 28px; font-weight: 700; color: var(--green); }
+        .stat-card .label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+        .stat-card .sub { font-size: 11px; color: var(--dimmer); margin-top: 4px; }
+        .stat-card .sub.up { color: var(--green); }
+
+        /* Actions */
+        .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+        .btn { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; }
+        .btn-green { background: var(--green); color: #000; }
+        .btn-purple { background: var(--purple); color: #fff; }
+        .btn-red { background: var(--red); color: #fff; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+        #msg { font-size: 13px; margin-bottom: 12px; }
+
+        /* Section title */
+        h2 { font-size: 15px; margin: 24px 0 12px; color: var(--purple); }
+        .section-desc { font-size: 12px; color: var(--dimmer); margin-bottom: 12px; }
+
+        /* Risk alerts timeline */
+        .alert-list { display: flex; flex-direction: column; gap: 8px; }
+        .alert-item { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--red); border-radius: 8px; padding: 10px 14px; font-size: 13px; }
+        .alert-item.medium { border-left-color: var(--orange); }
+        .alert-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .alert-dot.high { background: var(--red); }
+        .alert-dot.medium { background: var(--orange); }
+        .alert-time { color: var(--dimmer); font-size: 11px; margin-left: auto; white-space: nowrap; }
+
+        /* Mobile card tickets */
+        .ticket-list { display: flex; flex-direction: column; gap: 8px; }
+        .ticket-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+        .ticket-card.resolved { opacity: 0.5; }
+        .ticket-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 4px; }
+        .ticket-id { font-family: monospace; font-size: 11px; color: var(--muted); }
+        .ticket-question { font-size: 14px; margin-bottom: 6px; line-height: 1.4; }
+        .ticket-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--muted); }
+        .ticket-actions { margin-top: 8px; }
         .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-        .tag-high { background: rgba(220,38,38,0.2); color: #dc2626; }
-        .tag-urgent { background: rgba(245,158,11,0.2); color: #f59e0b; }
-        .nav { margin-bottom: 20px; }
-        .nav a { color: #888; text-decoration: none; margin-right: 16px; }
-        .nav a:hover { color: #19c37d; }
+        .tag-high { background: rgba(239,68,68,0.15); color: var(--red); }
+        .tag-medium { background: rgba(245,158,11,0.15); color: var(--orange); }
+        .tag-resolved { color: var(--green); }
+        .tag-processing { color: var(--orange); }
+
+        /* Detail modal */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 100; justify-content: center; align-items: center; padding: 16px; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; max-width: 560px; width: 100%; max-height: 80vh; overflow-y: auto; }
+        .modal h3 { font-size: 16px; margin-bottom: 12px; color: var(--green); }
+        .modal .field { margin-bottom: 10px; }
+        .modal .field-label { font-size: 11px; color: var(--dimmer); text-transform: uppercase; }
+        .modal .field-value { font-size: 14px; margin-top: 2px; }
+        .modal .close-btn { float: right; background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; }
+
+        /* Chat log */
+        .chat-log { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; max-height: 300px; overflow-y: auto; font-size: 13px; }
+        .chat-log .entry { padding: 6px 0; border-bottom: 1px solid var(--border); }
+        .chat-log .entry:last-child { border-bottom: none; }
+        .chat-log .user { color: var(--blue); }
+        .chat-log .ai { color: var(--green); }
+        .chat-log .risk-tag { font-size: 10px; padding: 1px 4px; border-radius: 3px; margin-left: 6px; }
+
+        /* Desktop table (hidden on mobile) */
+        @media (min-width: 768px) {
+            .ticket-card.hide-desktop { display: none; }
+        }
+        @media (max-width: 767px) {
+            body { padding: 12px; }
+            h1 { font-size: 18px; }
+            .stat-grid { grid-template-columns: repeat(2, 1fr); }
+            .stat-card { padding: 12px; }
+            .stat-card .num { font-size: 22px; }
+            .ticket-question { font-size: 13px; }
+        }
     </style>
 </head>
 <body>
-    <div class="nav">
-        <a href="/">← 返回聊天</a>
-        <span style="color:#444;">|</span>
-        <span style="color:#888;">衡阳燃气AI客服 V2.0</span>
-    </div>
-    <h1>管理后台</h1>
+<div class="nav">
+    <a href="/">← 返回聊天</a><span class="sep">|</span>
+    <a href="/admin/logout">退出登录</a><span class="sep">|</span>
+    <span class="ver">衡阳燃气AI客服 V3.0</span>
+</div>
 
-    <div class="grid">
-        <div class="card"><div class="num">{{ faq_count }}</div><div class="label">FAQ知识库条目</div></div>
-        <div class="card"><div class="num">{{ policy_count }}</div><div class="label">法规知识库条目</div></div>
-        <div class="card"><div class="num">{{ tickets|length }}</div><div class="label">紧急工单</div></div>
-        <div class="card"><div class="num">{{ logs|length }}</div><div class="label">日志记录</div></div>
-    </div>
+<h1>AI 安全管理中心</h1>
 
-    <div class="actions">
-        <button class="btn-green" onclick="reloadKB()">热更新知识库</button>
-        <form id="uploadForm" style="display:inline;">
-            <input type="file" id="fileInput" accept=".xlsx,.csv" onchange="uploadKB()" style="display:none;">
-            <button type="button" class="btn-purple" onclick="document.getElementById('fileInput').click()">上传Excel更新</button>
-        </form>
-        <button class="btn-red" onclick="clearTickets()">清除工单记录</button>
-    </div>
-    <div id="msg" style="margin:8px 0;font-size:13px;"></div>
+<!-- AI状态监控 -->
+<div class="status-bar">
+    <span class="status-dot"><span class="dot dot-green"></span> DeepSeek API</span>
+    <span class="status-dot"><span class="dot dot-green"></span> RAG知识库 {{ faq_count }}+{{ policy_count }}条</span>
+    <span class="status-dot"><span class="dot dot-green"></span> 风险检测</span>
+    <span class="status-dot"><span class="dot dot-green"></span> 会话状态机</span>
+    <span class="status-dot"><span class="dot dot-green"></span> 热更新就绪</span>
+</div>
 
-    <h2>紧急工单 (最近20条)</h2>
+<!-- 统计卡片 -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="num">{{ faq_count }}</div>
+        <div class="label">FAQ知识库</div>
+        <div class="sub up">无需重启即可更新</div>
+    </div>
+    <div class="stat-card">
+        <div class="num">{{ policy_count }}</div>
+        <div class="label">法规知识库</div>
+        <div class="sub">燃气安全规范</div>
+    </div>
+    <div class="stat-card">
+        <div class="num">{{ tickets|length }}</div>
+        <div class="label">紧急工单</div>
+        {% set high_count = tickets|selectattr('风险等级','in',['高危','紧急'])|list|length %}
+        <div class="sub" style="color:{{ '#ef4444' if high_count > 0 else '#64748b' }}">高风险 {{ high_count }} 条</div>
+    </div>
+    <div class="stat-card">
+        <div class="num">{{ logs|length }}</div>
+        <div class="label">安全日志</div>
+        <div class="sub">实时监控记录</div>
+    </div>
+</div>
+
+<!-- 操作按钮 -->
+<div class="actions">
+    <button class="btn btn-green" onclick="reloadKB()">热更新知识库（无需重启）</button>
+    <button class="btn btn-purple" onclick="document.getElementById('fileInput').click()">上传Excel更新</button>
+    <button class="btn btn-outline" onclick="location.reload()">刷新数据</button>
+    <input type="file" id="fileInput" accept=".xlsx,.csv" onchange="uploadKB()" style="display:none;">
+    <button class="btn btn-red" onclick="clearTickets()" style="margin-left:auto;">清除工单</button>
+</div>
+<div id="msg"></div>
+
+<!-- 风险告警时间线 -->
+<h2>最近风险事件</h2>
+<div class="alert-list">
     {% if tickets %}
-    <table>
-        <tr><th>工单ID</th><th>时间</th><th>用户问题</th><th>风险等级</th><th>状态</th><th>操作</th></tr>
-        {% for t in tickets %}
-        {% set resolved = t.get('状态') == '已解决' %}
-        <tr id="row-{{ t.get('工单ID', '') }}" style="{{ 'opacity:0.5' if resolved else '' }}">
-            <td style="font-family:monospace;font-size:11px;">{{ t.get('工单ID', '') }}</td>
-            <td>{{ t.get('时间', '') }}</td>
-            <td>{{ t.get('用户问题', '')[:30] }}</td>
-            <td><span class="tag tag-{{ 'high' if t.get('风险等级') in ('高危','紧急') else 'urgent' }}">{{ t.get('风险等级', '') }}</span></td>
-            <td><span class="tag {{ 'tag-resolved' if resolved else 'tag-processing' }}">{{ t.get('状态', '处理中') }}</span></td>
-            <td>
-                {% if not resolved %}
-                <button class="btn-green" style="padding:4px 10px;font-size:11px;" onclick="resolveTicket('{{ t.get('工单ID', '') }}')">标记已解决</button>
-                {% else %}
-                <span style="color:#19c37d;font-size:12px;">✓ 已解决</span>
-                {% endif %}
-            </td>
-        </tr>
-        {% endfor %}
-    </table>
+    {% for t in (tickets|reverse)[:5] %}
+    <div class="alert-item {{ 'medium' if t.get('风险等级','') not in ('高危','紧急') else '' }}">
+        <span class="alert-dot {{ 'high' if t.get('风险等级','') in ('高危','紧急') else 'medium' }}"></span>
+        <span>"{{ t.get('用户问题', '')[:40] }}"</span>
+        <span class="alert-time">{{ t.get('时间', '')[-8:] if t.get('时间','')|length > 8 else t.get('时间','') }}</span>
+    </div>
+    {% endfor %}
     {% else %}
-    <p style="color:#888;font-size:13px;">暂无紧急工单</p>
+    <div class="alert-item medium">
+        <span class="alert-dot medium"></span>
+        <span>暂无风险事件，系统正常运行</span>
+    </div>
     {% endif %}
+</div>
 
-    <h2>紧急日志 (最近20条)</h2>
-    <div class="log">{% for l in logs %}{{ l }}{% endfor %}</div>
+<!-- 工单列表（卡片式） -->
+<h2>紧急工单</h2>
+<div class="ticket-list">
+    {% if tickets %}
+    {% for t in (tickets|reverse)[:20] %}
+    {% set resolved = t.get('状态') == '已解决' %}
+    <div class="ticket-card {{ 'resolved' if resolved else '' }}" id="card-{{ t.get('工单ID', '') }}">
+        <div class="ticket-header">
+            <span class="ticket-id">{{ t.get('工单ID', '') }}</span>
+            <span>
+                <span class="tag {{ 'tag-high' if t.get('风险等级','') in ('高危','紧急') else 'tag-medium' }}">{{ t.get('风险等级', '') }}</span>
+                <span class="tag {{ 'tag-resolved' if resolved else 'tag-processing' }}">{{ t.get('状态', '处理中') }}</span>
+            </span>
+        </div>
+        <div class="ticket-question">{{ t.get('用户问题', '')[:60] }}</div>
+        <div class="ticket-meta">
+            <span>{{ t.get('时间', '') }}</span>
+        </div>
+        <div class="ticket-actions">
+            <button class="btn btn-outline" style="padding:4px 10px;font-size:11px;" onclick="showDetail(this)"
+                data-id="{{ t.get('工单ID','') }}"
+                data-time="{{ t.get('时间','') }}"
+                data-question="{{ t.get('用户问题','') }}"
+                data-risk="{{ t.get('风险等级','') }}"
+                data-status="{{ t.get('状态','处理中') }}"
+                data-ip="{{ t.get('用户IP','') }}">查看详情</button>
+            {% if not resolved %}
+            <button class="btn btn-green" style="padding:4px 10px;font-size:11px;" onclick="resolveTicket('{{ t.get('工单ID','') }}')">标记已解决</button>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p style="color: var(--dimmer); font-size: 13px;">暂无紧急工单</p>
+    {% endif %}
+</div>
 
-    <script>
-        function reloadKB() {
-            fetch("/admin/reload", {method:"POST"})
-                .then(r=>r.json())
-                .then(d=>{ document.getElementById("msg").innerHTML = '<span style=color:#19c37d>'+d.message+'</span>'; });
-        }
-        function uploadKB() {
-            var file = document.getElementById("fileInput").files[0];
-            if (!file) return;
-            var form = new FormData();
-            form.append("file", file);
-            fetch("/admin/upload", {method:"POST", body:form})
-                .then(r=>r.json())
-                .then(d=>{
-                    document.getElementById("msg").innerHTML = '<span style=color:'+(d.status=="ok"?"#19c37d":"#dc2626")+'">'+d.message+'</span>';
-                    if (d.status=="ok") setTimeout(function(){location.reload();}, 1000);
-                });
-        }
-        function resolveTicket(id) {
-            if (!confirm("确定标记工单 " + id + " 为已解决？")) return;
-            fetch("/admin/tickets/resolve/" + id, {method:"POST"})
-                .then(r=>r.json())
-                .then(d=>{
-                    document.getElementById("msg").innerHTML = '<span style=color:'+(d.status=="ok"?"#19c37d":"#dc2626")+'">'+d.message+'</span>';
-                    if (d.status=="ok") setTimeout(function(){location.reload();}, 800);
-                });
-        }
-        function clearTickets() {
-            if (!confirm("确定清除所有工单记录？此操作不可恢复。")) return;
-            fetch("/admin/tickets/clear", {method:"POST"})
-                .then(r=>r.json())
-                .then(d=>{
-                    document.getElementById("msg").innerHTML = '<span style=color:'+(d.status=="ok"?"#19c37d":"#dc2626")+'">'+d.message+'</span>';
-                    if (d.status=="ok") setTimeout(function(){location.reload();}, 1000);
-                });
-        }
-    </script>
+<!-- 安全日志 -->
+<h2>安全日志</h2>
+<div class="log" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;font-family:monospace;font-size:12px;max-height:200px;overflow-y:auto;white-space:pre-wrap;color:var(--muted);">
+{% for l in logs %}{{ l }}{% endfor %}
+</div>
+
+<!-- 工单详情弹窗 -->
+<div class="modal-overlay" id="detailModal">
+    <div class="modal">
+        <button class="close-btn" onclick="closeDetail()">✕</button>
+        <h3>工单详情</h3>
+        <div class="field"><div class="field-label">工单ID</div><div class="field-value" id="d-id">-</div></div>
+        <div class="field"><div class="field-label">时间</div><div class="field-value" id="d-time">-</div></div>
+        <div class="field"><div class="field-label">用户原话</div><div class="field-value" id="d-question">-</div></div>
+        <div class="field"><div class="field-label">风险等级</div><div class="field-value" id="d-risk">-</div></div>
+        <div class="field"><div class="field-label">处理状态</div><div class="field-value" id="d-status">-</div></div>
+        <div class="field"><div class="field-label">用户IP</div><div class="field-value" id="d-ip">-</div></div>
+    </div>
+</div>
+
+<script>
+function reloadKB() {
+    fetch("/admin/reload", {method:"POST"}).then(r=>r.json()).then(d=>{
+        document.getElementById("msg").innerHTML = '<span style=color:#22c55e>'+d.message+'</span>';
+    });
+}
+function uploadKB() {
+    var file = document.getElementById("fileInput").files[0];
+    if (!file) return;
+    var form = new FormData(); form.append("file", file);
+    fetch("/admin/upload", {method:"POST", body:form}).then(r=>r.json()).then(d=>{
+        document.getElementById("msg").innerHTML = '<span style=color:'+(d.status=="ok"?"#22c55e":"#ef4444")+'">'+d.message+'</span>';
+        if(d.status=="ok") setTimeout(function(){location.reload();}, 1000);
+    });
+}
+function resolveTicket(id) {
+    if(!confirm("确定标记工单 " + id + " 为已解决？")) return;
+    fetch("/admin/tickets/resolve/"+id, {method:"POST"}).then(r=>r.json()).then(d=>{
+        document.getElementById("msg").innerHTML = '<span style=color:'+(d.status=="ok"?"#22c55e":"#ef4444")+'">'+d.message+'</span>';
+        if(d.status=="ok") setTimeout(function(){location.reload();}, 800);
+    });
+}
+function clearTickets() {
+    if(!confirm("确定清除所有工单记录？此操作不可恢复。")) return;
+    fetch("/admin/tickets/clear", {method:"POST"}).then(r=>r.json()).then(d=>{
+        document.getElementById("msg").innerHTML = '<span style=color:'+(d.status=="ok"?"#22c55e":"#ef4444")+'">'+d.message+'</span>';
+        if(d.status=="ok") setTimeout(function(){location.reload();}, 1000);
+    });
+}
+function showDetail(btn) {
+    document.getElementById("d-id").textContent = btn.dataset.id;
+    document.getElementById("d-time").textContent = btn.dataset.time;
+    document.getElementById("d-question").textContent = btn.dataset.question;
+    document.getElementById("d-risk").textContent = btn.dataset.risk;
+    document.getElementById("d-status").textContent = btn.dataset.status;
+    document.getElementById("d-ip").textContent = btn.dataset.ip || "-";
+    document.getElementById("detailModal").classList.add("active");
+}
+function closeDetail() {
+    document.getElementById("detailModal").classList.remove("active");
+}
+</script>
 </body>
 </html>
