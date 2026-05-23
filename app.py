@@ -5,6 +5,7 @@
 from flask import Flask, render_template, request, jsonify, session, redirect
 from config import SECRET_KEY, DEBUG, ENABLE_AI_FALLBACK
 from services.knowledge_service import KnowledgeService
+from services.understand_service import UnderstandService
 from services.ai_service import (
     AIService, IntentDetector, IntentUnderstandingService, RiskDetectionService,
     TicketGenerationService, IntentClassifierService, EmotionDetectionService, FuzzyDetectionService, SessionStateService,
@@ -26,6 +27,7 @@ ticket_svc = TicketGenerationService(ai._client) if ai else None
 classifier_svc = IntentClassifierService(ai._client) if ai else None
 emotion_svc = EmotionDetectionService(ai._client) if ai else None
 fuzzy_svc = FuzzyDetectionService(ai._client) if ai else None
+understand_svc = UnderstandService(ai._client) if ai else None
 state_svc = SessionStateService(ai._client) if ai else None
 
 TRANSFER_REPLY = (
@@ -341,7 +343,9 @@ def chat():
                    "standard_question": biz["standard_question"], "category": biz["category"]},
         "emotion": emotion,
         "fuzzy": fuzzy,
+        "understand": understand,
         "fuzzy": fuzzy,
+        "understand": understand,
         "session_state": {"current": state_result.get("new_state", "normal"), "previous": prev_state, "should_confirm_safety": state_result.get("should_confirm_safety", False)},
         "session_state": {"current": state_result.get("new_state", "normal"), "previous": prev_state, "should_confirm_safety": state_result.get("should_confirm_safety", False)},
         "risk": {"level": risk["level"], "label": risk["label"], "reason": risk["reason"]},
