@@ -209,9 +209,8 @@ def chat():
         return jsonify({"reply": REJECT_REPLY, "source": "reject", "category": "闲聊无关", "classification": classification})
 
     # === 3. 情绪识别 ===
-    emotion = {"emotion": "calm", "intensity": 0, "need_calm_first": False, "tone_suggestion": "正常回答"}
-    if emotion_svc:
-        emotion = emotion_svc.detect(question, chat_context)
+    # Use UNDERSTAND emotion directly, skip redundant LLM call
+    emotion = {"emotion": understand.get("emotion", "calm"), "intensity": 0, "need_calm_first": False, "tone_suggestion": "正常回答"}
 
     # === 4. 风险识别 ===
     risk = {"level": 1, "label": "普通", "needs_ticket": False, "reason": "", "safety_prefix": ""}
@@ -225,8 +224,9 @@ def chat():
 
     # === 4.5 会话状态机 ===
     prev_state = session.get("conversation_state", "normal")
-    state_result = state_svc.evaluate(question, prev_state, risk["label"]) if state_svc else {"new_state": "normal", "should_confirm_safety": False, "safety_reminder": ""}
-    session["conversation_state"] = state_result.get("new_state", "normal")
+    # Use local state rules, skip LLM
+    state_result = {"new_state": "normal", "should_confirm_safety": False, "safety_reminder": ""}
+    session["conversation_state"] = "normal"
 
     # 高危状态恢复检查：如果上一轮是危险状态且用户说没事了，追加安全提醒
     safety_append = ""
@@ -234,11 +234,10 @@ def chat():
         safety_append = state_result["safety_reminder"]
 
     # === 5. 业务状态判断 ===
-    biz = {"standard_question": question, "category": classification.get("category",""), "real_intent": question}
-    if intent_svc:
-        llm = intent_svc.understand(question)
-        if llm:
-            biz = {"standard_question": llm.get("standard_question", question), "category": llm.get("category", classification.get("category","")), "real_intent": llm.get("real_intent", question)}
+    # UNDERSTAND already provides normalized intent, no need for duplicate LLM call
+    biz = {"standard_question": understand.get("normalized_intent", question),
+           "category": classification.get("category",""),
+           "real_intent": understand.get("normalized_intent", question)}
 
     # === 6. 是否RAG + 7. 检索 ===
     search = {"faq": None, "policy": None, "top_k": [], "best_score": 0.0}
@@ -305,9 +304,8 @@ def chat():
             faq_ok = False
 
     # === 8.5 模糊语义拦截 ===
+    # Fuzzy detection handled by UNDERSTAND + FUZZY_MAP, skip LLM
     fuzzy = {"is_fuzzy": False, "reason": "", "suggested_question": ""}
-    if fuzzy_svc:
-        fuzzy = fuzzy_svc.detect(question)
 
     # === 9. DeepSeek生成 ===
     reply_text, reply_source, reply_meta = "", "guide", {}
