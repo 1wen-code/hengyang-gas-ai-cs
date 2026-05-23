@@ -7,7 +7,7 @@ from config import SECRET_KEY, DEBUG, ENABLE_AI_FALLBACK
 from services.knowledge_service import KnowledgeService
 from services.ai_service import (
     AIService, IntentDetector, IntentUnderstandingService, RiskDetectionService,
-    TicketGenerationService,
+    TicketGenerationService, IntentClassifierService,
     REJECT_REPLY, GREETING_REPLY, IDENTITY_REPLY, BUSINESS_GUIDE_REPLY,
     REFUND_REPLY, EMOTION_REPLY, EMOTION_LIGHT_REPLY, CRISIS_REPLY, COMPLAINT_REPLY,
 )
@@ -22,6 +22,7 @@ ai = AIService() if ENABLE_AI_FALLBACK else None
 intent_svc = IntentUnderstandingService(ai._client) if ai else None
 risk_svc = RiskDetectionService(ai._client) if ai else None
 ticket_svc = TicketGenerationService(ai._client) if ai else None
+classifier_svc = IntentClassifierService(ai._client) if ai else None
 
 TRANSFER_REPLY = (
     "非常抱歉，我暂时无法准确回答您的问题。"
@@ -83,6 +84,36 @@ def _layer1_intent(question: str) -> dict:
         "standard_question": llm["standard_question"] if llm else question,
         "category": llm["category"] if llm else kb._classify(question),
         "real_intent": llm["real_intent"] if llm else question,
+    }
+
+
+def _layer1_5_classify(question: str, intent: dict, history: list = None) -> dict:
+    """
+    Layer 1.5 — 检索前分类
+    JSON 分类器：is_gas_related / need_rag / category / risk_level / confidence
+    """
+    # 格式化历史
+    chat_history = ""
+    if history:
+        lines = []
+        for h in history[-6:]:
+            role = "用户" if h.get("role") == "user" else "客服"
+            content = h.get("content", "")[:100]
+            lines.append(f"{role}：{content}")
+        chat_history = "\n".join(lines)
+
+    if classifier_svc:
+        result = classifier_svc.classify(question, chat_history)
+        return result
+
+    # 降级：无 AI 时用正则意图推断
+    ri = intent.get("regex_intent", "")
+    return {
+        "is_gas_related": ri not in ("irrelevant",),
+        "need_rag": ri in ("gas_related", "vague_business"),
+        "category": intent.get("category", ""),
+        "risk_level": "",
+        "confidence": 0.5,
     }
 
 
@@ -259,7 +290,8 @@ def _layer5_ticket(question: str, risk: dict, client_ip: str = "") -> dict | Non
 
 
 def _layer6_build_response(reply: dict, intent: dict, search: dict,
-                           risk: dict, ticket: dict | None) -> dict:
+                           risk: dict, ticket: dict | None,
+                           classification: dict = None) -> dict:
     """
     Layer 6 — 组装最终响应
     """
@@ -287,6 +319,8 @@ def _layer6_build_response(reply: dict, intent: dict, search: dict,
             "reason": risk["risk_reason"],
             "safety_appended": risk["safety_appended"],
         },
+        # 检索前分类
+        "classification": classification or {},
     }
     if reply.get("match_question"):
         resp["match_question"] = reply["match_question"]
@@ -333,6 +367,18 @@ def chat():
     if intent["fast_return"]:
         return intent["response"]
 
+    # Layer 1.5: 检索前分类
+    classification = _layer1_5_classify(question, intent, history)
+
+    # 非燃气问题：直接拒绝，不走检索
+    if not classification.get("is_gas_related", True):
+        return jsonify({
+            "reply": REJECT_REPLY,
+            "source": "reject",
+            "category": "闲聊无关",
+            "classification": classification,
+        })
+
     # Layer 2: 分类检索
     search = _layer2_search(intent["standard_question"], question)
 
@@ -346,7 +392,7 @@ def chat():
     ticket = _layer5_ticket(question, risk, client_ip)
 
     # Layer 6: 返回响应
-    response = _layer6_build_response(reply, intent, search, risk, ticket)
+    response = _layer6_build_response(reply, intent, search, risk, ticket, classification)
 
     # ── 更新服务端记忆 ──────────────────────────
     server_memory.append({"role": "user", "content": question})

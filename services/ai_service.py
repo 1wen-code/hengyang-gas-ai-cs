@@ -906,3 +906,141 @@ class TicketGenerationService:
             "human_intervention": human_intervention,
             "raw_response": response,
         }
+
+
+# ── 第二层：意图分类器（检索前 JSON 分类）─────────
+
+INTENT_CLASSIFIER_PROMPT = """你是燃气AI客服系统的"检索前分类器"。
+
+请判断用户问题属于哪个业务类型。
+
+输出 JSON（严格只输出 JSON，不要多余文字）：
+
+{
+"is_gas_related": true,
+"need_rag": true,
+"category": "",
+"risk_level": "",
+"confidence": 0.95
+}
+
+---
+
+分类范围（category 只从以下选择）：
+
+* 燃气缴费
+* 开户安装
+* 灶具维修
+* 热水器故障
+* 燃气泄漏
+* 安全用气
+* 投诉建议
+* 人工客服
+* 闲聊无关
+
+---
+
+规则：
+
+1. 必须结合历史上下文。
+
+2. 用户简短回复时：
+   要自动补全语义。
+
+例如：
+
+历史：
+"灶打不着火"
+
+当前：
+"右边"
+
+应理解为：
+"右边灶头打不着火"。
+
+---
+
+3. 非燃气问题：
+
+禁止进入知识库检索。
+is_gas_related 设为 false
+need_rag 设为 false
+
+---
+
+4. 若无法确定：
+
+category 返回：
+"需要追问"
+
+---
+
+历史聊天：
+{chat_history}
+
+当前问题：
+{question}"""
+
+
+class IntentClassifierService:
+    """检索前 JSON 分类器 — 判断业务类型 + 是否需要RAG"""
+
+    def __init__(self, client: OpenAI):
+        self._client = client
+
+    def classify(self, question: str, chat_history: str = "") -> dict:
+        """
+        调用 DeepSeek 进行检索前分类。
+
+        返回:
+            {
+                "is_gas_related": bool,
+                "need_rag": bool,
+                "category": str,
+                "risk_level": str,
+                "confidence": float,
+            }
+            失败时返回默认值
+        """
+        prompt = INTENT_CLASSIFIER_PROMPT.format(
+            chat_history=chat_history or "（无历史记录）",
+            question=question,
+        )
+        try:
+            resp = self._client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
+                messages=[
+                    {"role": "system", "content": prompt},
+                ],
+                temperature=0.0,
+                max_tokens=150,
+                response_format={"type": "json_object"},
+            )
+            raw = resp.choices[0].message.content.strip()
+            return self._parse(raw)
+        except Exception:
+            return self._default()
+
+    def _parse(self, raw: str) -> dict:
+        """解析 JSON 输出"""
+        import json
+        try:
+            data = json.loads(raw)
+            return {
+                "is_gas_related": data.get("is_gas_related", True),
+                "need_rag": data.get("need_rag", True),
+                "category": data.get("category", ""),
+                "risk_level": data.get("risk_level", ""),
+                "confidence": float(data.get("confidence", 0.5)),
+            }
+        except (json.JSONDecodeError, ValueError):
+            return self._default()
+
+    def _default(self) -> dict:
+        return {
+            "is_gas_related": True,
+            "need_rag": True,
+            "category": "",
+            "risk_level": "",
+            "confidence": 0.0,
+        }
