@@ -148,14 +148,6 @@ def chat():
     safe_confirm_count = conversation_state.get("safe_confirm_count", 0)
     risk_downgrade_confirm = conversation_state.get("risk_downgrade_confirm", False)
 
-    # 风险降级确认：高风险后用户说"骗你的"/"开玩笑" → 不降级
-    joke_words = ["骗你的", "开玩笑", "逗你", "测试的", "试一下", "闹着玩", "假的"]
-    if risk_locked and any(w in question for w in joke_words):
-        risk_downgrade_confirm = True
-        # 保持risk_active不变，不降级
-    elif risk_downgrade_confirm:
-        risk_downgrade_confirm = False  # 下一轮正常
-
     # 状态锁：等待用户选择选项时，直接解析选项编号
     if awaiting_option and question.strip() in ["1", "2", "3", "4", "5"]:
         option = int(question.strip())
@@ -172,6 +164,11 @@ def chat():
     # 风险冷却机制：需要连续2次安全确认才能解除风险
     risk_active = conversation_state.get("risk_active", False)
     risk_locked = bool(session.get("risk_locked", False) or risk_active)
+
+    # 风险降级确认：高风险后用户说"骗你的"/"开玩笑" → 不降级
+    joke_words = ["骗你的", "开玩笑", "逗你", "测试的", "试一下", "闹着玩", "假的"]
+    if risk_locked and any(w in question for w in joke_words):
+        session["risk_downgrade_confirm"] = True
     safety_confirm_words = ["没味了", "没味道了", "关了", "关好了", "通风了", "不晕了",
                             "修好了", "换好了", "正常了", "解决了", "没事了", "好了"]
     safety_count = sum(1 for w in safety_confirm_words if w in question)
