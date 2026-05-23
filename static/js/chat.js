@@ -145,8 +145,12 @@
                     appendMessage("bot", "抱歉，系统出现错误：" + data.error, "error");
                 } else {
                     // 风险事件：显示颜色警告横幅
-                    if (data.source === "emergency" || data.source === "warning") {
-                        showEmergencyBanner(data.risk_level, data.risk_code, data.ticket_id);
+                    var riskLevel = (data.risk && data.risk.level >= 2) ? data.risk.level : null;
+                    if (riskLevel || data.source === "emergency" || data.source === "warning") {
+                        var riskLabel = (data.risk && data.risk.label) || data.risk_level || "警告";
+                        var riskCode = riskLevel || data.risk_code || 2;
+                        var ticketId = data.ticket || data.ticket_id || null;
+                        showEmergencyBanner(riskLabel, riskCode, ticketId);
                     }
                     var msgDiv = appendMessage(
                         "bot",
