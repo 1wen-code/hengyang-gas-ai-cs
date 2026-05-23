@@ -129,10 +129,21 @@ def generate_ticket(question: str, risk_level: str, ip: str = "", user_session: 
         "用户标识": user_session,
     }
     os.makedirs(os.path.dirname(TICKETS_PATH), exist_ok=True)
-    file_exists = os.path.exists(TICKETS_PATH)
+    fieldnames = list(ticket.keys())
+    need_header = not os.path.exists(TICKETS_PATH) or os.path.getsize(TICKETS_PATH) == 0
+    # 检查表头完整性
+    if not need_header:
+        try:
+            with open(TICKETS_PATH, "r", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                if not reader.fieldnames or len(reader.fieldnames) < len(fieldnames):
+                    need_header = True
+        except:
+            pass
     with open(TICKETS_PATH, "a", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=ticket.keys())
-        if not file_exists: writer.writeheader()
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if need_header:
+            writer.writeheader()
         writer.writerow(ticket)
     return ticket
 
