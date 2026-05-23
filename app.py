@@ -141,14 +141,16 @@ def chat():
         search["top_k"] = kb.search_top_k(sq, k=8)
         search["best_score"] = search["faq"]["score"] if search["faq"] else (search["top_k"][0]["score"] if search["top_k"] else 0.0)
 
-    # === 8. 相似度过滤 + 类别一致性校验 ===
+    # === 8. 相似度过滤 + 类别一致性 + AI自主判断 ===
     faq_ok = search["faq"] and search["faq"]["score"] >= 0.20
 
-    # 类别一致性校验：防止 FAQ 返回与分类器判断完全不同的答案
     if faq_ok:
         cls_cat = classification.get("category", "")
+        cls_conf = classification.get("confidence", 0)
         faq_cat = search["faq"]["category"] if search["faq"] else ""
-        # 高危类别对：不能混用
+        faq_score = search["faq"]["score"]
+
+        # 危险类别对：直接拒绝
         danger_pairs = [
             ("燃气泄漏", "燃气缴费"), ("燃气泄漏", "开户安装"),
             ("安全用气", "燃气缴费"), ("安全用气", "开户安装"),
@@ -162,6 +164,12 @@ def chat():
         )
         if mismatch:
             faq_ok = False  # 类别不匹配，降级走 RAG
+
+        # AI自主判断：分类器高置信 + FAQ低分 → 让AI自己思考
+        if faq_ok and cls_conf >= 0.80 and faq_score < 0.40:
+            # 分类器很确定意图，但 FAQ 匹配度偏低，可能是知识库没有精确匹配
+            # 让 AI 结合分类结果自主推理，不用模糊的 FAQ 回答
+            faq_ok = False
 
     # === 9. DeepSeek生成 ===
     reply_text, reply_source, reply_meta = "", "guide", {}
