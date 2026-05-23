@@ -144,6 +144,15 @@ def chat():
     awaiting_option = conversation_state.get("awaiting_option", False)
     fault_type = conversation_state.get("fault_type", "")
     safe_confirm_count = conversation_state.get("safe_confirm_count", 0)
+    risk_downgrade_confirm = conversation_state.get("risk_downgrade_confirm", False)
+
+    # 风险降级确认：高风险后用户说"骗你的"/"开玩笑" → 不降级
+    joke_words = ["骗你的", "开玩笑", "逗你", "测试的", "试一下", "闹着玩", "假的"]
+    if risk_locked and any(w in question for w in joke_words):
+        risk_downgrade_confirm = True
+        # 保持risk_active不变，不降级
+    elif risk_downgrade_confirm:
+        risk_downgrade_confirm = False  # 下一轮正常
 
     # 状态锁：等待用户选择选项时，直接解析选项编号
     if awaiting_option and question.strip() in ["1", "2", "3", "4", "5"]:
