@@ -178,7 +178,7 @@
 <h2>最近风险事件</h2>
 <div class="alert-list">
     {% if tickets %}
-    {% for t in (tickets|reverse)[:5] %}
+    {% for t in (tickets|reverse|list)[:5] %}
     <div class="alert-item {{ 'medium' if t.get('风险等级','') not in ('高危','紧急') else '' }}">
         <span class="alert-dot {{ 'high' if t.get('风险等级','') in ('高危','紧急') else 'medium' }}"></span>
         <span>"{{ t.get('用户问题', '')[:40] }}"</span>
@@ -206,7 +206,7 @@
 <h2>紧急工单</h2>
 <div class="ticket-list">
     {% if tickets %}
-    {% for t in (tickets|reverse)[:20] %}
+    {% for t in (tickets|reverse|list)[:20] %}
     {% set resolved = t.get('状态') == '已解决' %}
     <div class="ticket-card {{ 'resolved' if resolved else '' }}" id="card-{{ t.get('工单ID', '') }}">
         <div class="ticket-header">
