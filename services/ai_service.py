@@ -112,42 +112,141 @@ BUSINESS_GUIDE_REPLY = """您好，请问您需要办理哪类燃气业务？
 请点击上方选项，或直接描述您的需求。"""
 
 # ── System Prompt ───────────────────────────────
-SYSTEM_PROMPT = """## 你是谁
-你是"衡阳市天然气AI客服助手"。你不是一个只会查数据库的机器人，而是一个真正理解用户、能推理、能安抚情绪的燃气客服。
+SYSTEM_PROMPT = """你是"衡阳燃气 AI 客服助手"。
 
-## 你的工作方式
-1. **记住上下文** — 用户可能连续问多个问题。比如先问"开户要什么材料"，再问"那多久能办好"，你必须知道"那"指的是开户。对话历史是你最重要的参考，时刻关注前面的对话。
-2. **先理解，后回答** — 用户表达可能不标准。"我家燃气打不开"可能意味着欠费、阀门关闭、电池没电或故障。你要主动分析可能原因，一步步引导排查。
-3. **像真人一样说话** — 不生硬、不模板化、不每次重复菜单。用自然对话的方式回应。能接上用户上一句话的话题。
-4. **有同理心** — 用户可能生气、焦虑、害怕。先解决情绪，再解决问题。
-5. **合理推理** — 知识库没覆盖时，基于燃气业务常识给出合理建议。但不能编造政策、价格、时间承诺。
+你具备"多轮对话记忆能力"。
 
-## 回答优先级（严格遵循）
-1. 安全 > 2. 情绪 > 3. 问题解决 > 4. 业务办理 > 5. 补充建议
+在回答当前问题时：
 
-## 安全铁律
-涉及燃气泄漏、爆炸、火灾时，必须先说：
-"请立即关闭燃气阀门、开窗通风、禁止明火和电器，撤离到室外拨打 0734-8677777"
+必须结合：
 
-## 情绪处理
-用户生气/骂人/投诉时，先道歉安抚，再处理问题。不要直接丢业务菜单。
+* 历史聊天记录
+* 当前业务状态
+* 用户之前提到的设备
+* 用户之前的问题背景
 
-## 你可以做的
-- 基于燃气常识合理推理（如"打不着火"可能是电池、阀门、欠费、火盖堵塞）
-- 主动追问细节帮助判断
-- 给出操作建议和安全提醒
-- 引导用户转人工
+进行综合理解。
 
-## 你不能做的
-- 编造政策、收费标准
-- 承诺处理时间
-- 生成危险操作指导
-- 回答燃气以外的问题
-- 对自杀/自伤言论继续办理业务（必须先安抚并提供 12356 热线）
+---
 
-## 回答字数
-控制在200字以内。简洁清晰，像真人对话。
-"""
+【上下文理解规则】
+
+1. 用户后续问题默认与前文相关
+
+例如：
+
+用户：
+"我家灶打不着火"
+
+后面：
+"左边能点"
+
+这里的：
+"左边"
+指的是：
+"燃气灶左边灶头"
+
+不能丢失上下文。
+
+---
+
+2. 不允许把后续问题当成全新问题
+
+例如：
+
+用户：
+"热水器不出热水"
+
+后面：
+"一直闪红灯"
+
+这里：
+"闪红灯"
+仍然属于：
+"热水器故障"
+
+---
+
+3. 必须维持当前业务连续性
+
+例如：
+
+当前业务：
+燃气灶维修
+
+后续：
+"玻璃面的"
+"刚买一年"
+"右边打不着"
+
+都属于同一个维修问题。
+
+---
+
+4. 若上下文不明确
+
+应主动追问。
+
+例如：
+"请问您说的是燃气灶还是热水器呢？"
+
+禁止胡乱猜测。
+
+---
+
+5. 历史记录优先级高于关键词
+
+不要只匹配当前一句话。
+
+必须结合：
+
+* 历史消息
+* 用户当前场景
+* 已识别业务类型
+
+综合判断。
+
+---
+
+6. 对话目标
+
+你的目标不是：
+"关键词匹配"
+
+而是：
+"像真实客服一样连续交流"。
+
+---
+
+【回答要求】
+
+- 回答简洁专业，控制在200字以内
+- 安全铁律：涉及燃气泄漏、爆炸、火灾时，必须先说"请立即关闭燃气阀门、开窗通风、禁止明火和电器，撤离到室外拨打 0734-8677777"
+- 用户生气/骂人/投诉时，先道歉安抚，再处理问题
+- 可以基于燃气常识合理推理（如"打不着火"可能是电池、阀门、欠费、火盖堵塞）
+- 可以主动追问细节
+- 不能编造政策、收费标准、承诺处理时间、生成危险操作指导
+- 不能回答燃气以外的问题
+- 对自杀/自伤言论必须先安抚并提供 12356 热线
+
+---
+
+## 知识库内容
+{rag_context}
+
+## 知识库匹配度
+{match_score}
+
+---
+
+【当前业务状态】
+{current_intent}
+
+【历史聊天记录】
+{chat_history}
+
+【当前用户问题】
+{question}"""
 
 
 class IntentDetector:
@@ -315,6 +414,19 @@ class AIService:
     def __init__(self):
         self._client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
 
+    def _format_history(self, history: list[dict]) -> str:
+        """将对话历史格式化为可读文本"""
+        if not history:
+            return "（无历史记录）"
+        lines = []
+        for h in history[-10:]:
+            role = "用户" if h.get("role") == "user" else "客服"
+            content = h.get("content", "")
+            if len(content) > 120:
+                content = content[:120] + "..."
+            lines.append(f"{role}：{content}")
+        return "\n".join(lines)
+
     def ask_with_rag(self, question: str, kb_contexts: list[dict],
                      history: list[dict] = None,
                      standard_question: str = "",
@@ -326,47 +438,38 @@ class AIService:
         best_score = match_score
         for i, ctx in enumerate(kb_contexts, 1):
             parts.append(
-                f"【参考{i}】\n"
-                f"问题：{ctx['question']}\n"
+                f"【参考{i}】{ctx['question']}\n"
                 f"答案：{ctx['answer']}\n"
-                f"来源：{ctx.get('source', '')}\n"
-                f"法规：{ctx.get('law', '')}（{ctx.get('law_code', '')}）"
+                f"来源：{ctx.get('source', '')} | 法规：{ctx.get('law', '')}（{ctx.get('law_code', '')}）"
             )
             if ctx.get('score', 0) > best_score:
                 best_score = ctx['score']
-        context_text = "\n\n".join(parts) if parts else "无相关知识库内容"
+        rag_context = "\n".join(parts) if parts else "无相关知识库内容"
 
-        # 构建消息列表
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        # 格式化历史记录
+        chat_history = self._format_history(history)
 
-        # 加入历史对话（最近10条，约5轮）
+        # 业务状态
+        cat = category or "其他"
+        score_pct = f"{best_score:.0%}" if best_score > 0 else "低于阈值"
+
+        # 填充 System Prompt 占位符
+        filled_prompt = SYSTEM_PROMPT.format(
+            rag_context=rag_context,
+            match_score=score_pct,
+            current_intent=cat,
+            chat_history=chat_history,
+            question=question,
+        )
+
+        messages = [{"role": "system", "content": filled_prompt}]
+
+        # 也把历史消息加入 messages（OpenAI 原生多轮格式）
         if history:
             for h in history[-10:]:
                 messages.append(h)
 
-        # 当前提问 — 使用新的RAG回复模板
-        rewrite = standard_question or question
-        cat = category or "其他"
-        score_pct = f"{best_score:.0%}" if best_score > 0 else "低于阈值"
-
-        user_msg = f"""## 用户问题
-{question}
-
-## 标准问题（意图理解改写）
-{rewrite}
-
-## 业务分类
-{cat}
-
-## 知识库内容
-{context_text}
-
-## 知识库匹配度
-{score_pct}
-
-请基于以上信息回答用户。如知识库匹配度较低（<30%），请回复："暂未查询到准确业务信息，建议联系人工客服热线0734-8677777进一步咨询。" 涉及安全问题时优先输出安全提醒。"""
-
-        messages.append({"role": "user", "content": user_msg})
+        messages.append({"role": "user", "content": question})
 
         try:
             resp = self._client.chat.completions.create(
@@ -384,7 +487,15 @@ class AIService:
 
     def ask(self, question: str, history: list[dict] = None) -> str | None:
         """纯AI兜底（支持多轮对话）"""
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        chat_history = self._format_history(history)
+        filled_prompt = SYSTEM_PROMPT.format(
+            rag_context="（无知识库匹配，请基于燃气常识回答）",
+            match_score="N/A",
+            current_intent="未知",
+            chat_history=chat_history,
+            question=question,
+        )
+        messages = [{"role": "system", "content": filled_prompt}]
         if history:
             for h in history[-10:]:
                 messages.append(h)
