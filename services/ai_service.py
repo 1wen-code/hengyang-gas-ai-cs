@@ -783,13 +783,10 @@ class TicketGenerationService:
         from datetime import datetime
 
         ticket_id = f"TK-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
-        business_type = ""
-        risk_level = ""
-        summary = ""
-        suggestion = ""
-        human_intervention = False
 
-        # 辅助函数：提取两个【标签】之间的内容
+        # 防御：如果 LLM 自行输出了【工单编号】，先剥离（含同行内容和尾部空白）
+        cleaned = re.sub(r"【工单编号】[^\n]*\s*", "", response)
+
         def _extract(text: str, tag: str, next_tag: str = "") -> str:
             if next_tag:
                 m = re.search(rf"【{tag}】\s*(.+?)\s*\n【{next_tag}】", text, re.DOTALL)
@@ -797,12 +794,11 @@ class TicketGenerationService:
                 m = re.search(rf"【{tag}】\s*(.+?)$", text, re.DOTALL)
             return m.group(1).strip() if m else ""
 
-        business_type = _extract(response, "业务类型", "风险等级")
-        risk_level = _extract(response, "风险等级", "问题摘要")
-        summary = _extract(response, "问题摘要", "处理建议")
-        suggestion = _extract(response, "处理建议", "是否人工介入")
-
-        hi = _extract(response, "是否人工介入")
+        business_type = _extract(cleaned, "业务类型", "风险等级")
+        risk_level = _extract(cleaned, "风险等级", "问题摘要")
+        summary = _extract(cleaned, "问题摘要", "处理建议")
+        suggestion = _extract(cleaned, "处理建议", "是否人工介入")
+        hi = _extract(cleaned, "是否人工介入")
         human_intervention = "是" in hi
 
         return {
