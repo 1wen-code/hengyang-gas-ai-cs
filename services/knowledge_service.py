@@ -152,6 +152,78 @@ class KnowledgeService:
             return best
         return None
 
+    
+    def search_faq_by_category(self, question: str, category: str = "", top_k: int = 5) -> list[dict]:
+        """分类过滤检索 + 关键词重排序"""
+        if not question or not question.strip():
+            return []
+        question = question.strip()
+        query_tokens = self._expand_query(question)
+        scored = []
+        for _, row in self._faq_df.iterrows():
+            kb_q = str(row["用户问题"])
+            kb_kws = str(row.get("关键词", ""))
+            kb_tokens = set(jieba.lcut(kb_q + " " + kb_kws))
+            if not query_tokens or not kb_tokens:
+                continue
+            intersection = query_tokens & kb_tokens
+            union = query_tokens | kb_tokens
+            score = len(intersection) / len(union)
+            precision = len(intersection) / len(query_tokens) if query_tokens else 0
+            if precision < 0.6: score -= 0.12
+            if len(intersection) >= 3: score += 0.08 * (len(intersection) - 2)
+            if len(intersection) >= 5: score += 0.10
+            if len(query_tokens) <= 3 and len(kb_tokens) > 8: score -= 0.05
+            if question in kb_q or kb_q in question: score += 0.15
+            score = max(0.0, min(score, 1.0))
+            faq_cat = str(row.get("一级标签", ""))
+            scored.append({
+                "question": kb_q,
+                "answer": self._safe(row["标准回答"]),
+                "category": f"{self._safe(row.get('一级标签', ''))} > {self._safe(row.get('二级标签', ''))}",
+                "faq_cat": faq_cat,
+                "source": self._safe(row.get("回答来源", "")),
+                "law": self._safe(row.get("法规依据", "")),
+                "law_code": self._safe(row.get("依据编码", "")),
+                "risk": self._safe(row.get("风险等级", "低")),
+                "score": round(min(score, 1.0), 3),
+            })
+        scored.sort(key=lambda x: x["score"], reverse=True)
+
+        # 分类过滤：优先匹配同类FAQ
+        if category:
+            priority_keywords = {
+                "开户业务": ["材料", "流程", "费用", "办理", "身份证", "房产证", "时间"],
+                "缴费业务": ["微信", "支付宝", "充值", "线上", "银行", "代扣"],
+                "安全风险": ["关阀", "通风", "撤离", "抢修", "报警"],
+                "灶具维修": ["排查", "电池", "阀门", "火盖", "清理"],
+                "故障报修": ["报修", "上门", "维修", "预约", "师傅"],
+                "投诉建议": ["投诉", "反馈", "赔偿", "处理"],
+            }
+            keywords = priority_keywords.get(category, [])
+
+            # 重排序：同类FAQ提权，含优先关键词的额外加分
+            for item in scored:
+                if category in item.get("faq_cat", ""):
+                    item["score"] += 0.15
+                for kw in keywords:
+                    if kw in item.get("question", "") or kw in item.get("answer", ""):
+                        item["score"] += 0.05
+
+            scored.sort(key=lambda x: x["score"], reverse=True)
+            # 剔除分太低且类别不匹配的
+            scored = [s for s in scored if s["score"] >= 0.10]
+
+        # 去重：相似问题只保留最高分
+        seen_answers = set()
+        unique = []
+        for s in scored:
+            ans_key = s["answer"][:50]
+            if ans_key not in seen_answers:
+                seen_answers.add(ans_key)
+                unique.append(s)
+        return unique[:top_k]
+
     def search_policy(self, question: str) -> dict | None:
         """法规知识库匹配"""
         if not question or not question.strip():

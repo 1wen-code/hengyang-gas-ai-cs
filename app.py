@@ -62,6 +62,51 @@ def _fmt_history(history: list, max_items: int = 6) -> str:
     return "\n".join(lines)
 
 
+
+# ── 固定业务模板 ──────────────────────────────
+BUSINESS_TEMPLATES = {
+    "开户业务": """居民燃气开户指南：
+
+**所需材料：**
+1. 有效身份证原件及复印件
+2. 房屋产权证或购房合同原件
+3. 现场填写《居民燃气开户申请表》
+
+**办理流程：**
+1. 携带材料到任一营业厅办理
+2. 签订《居民燃气供用气合同》
+3. 缴纳安装费（根据户型不同约2000-5000元）
+4. 预约上门安装（一般3-7个工作日）
+
+**营业厅地址：**
+- 中心营业厅：石鼓区明翰路31号
+- 珠晖营业厅：东风南路3号
+- 华新营业厅：白云路58号
+
+**注意事项：**
+- 代办需额外提供代办人身份证
+- 低保户携带低保证明可享200元优惠
+- 建议先拨打0734-8677777确认所需材料""",
+
+    "缴费业务": """燃气缴费方式：
+
+**线上缴费（推荐）：**
+1. 微信公众号"衡阳天然气" → 燃气服务 → 在线缴费
+2. 微信生活缴费 / 支付宝 → 燃气费
+3. 银行代扣（建行、工行、中行、农行、交行）
+
+**线下缴费：**
+1. 各营业厅柜台（现金/POS刷卡）
+2. IC卡表用户需携卡到营业厅充值
+
+**收费标准：**
+- 第一阶梯（0-360m³/年）：2.85元/m³
+- 第二阶梯（361-600m³/年）：3.42元/m³
+- 第三阶梯（600m³以上）：4.28元/m³
+
+**查询缴费记录：** 微信公众号 → 我的 → 缴费记录""",
+}
+
 # ── 快速路径映射 ────────────────────────────────
 FAST_INTENT_REPLIES = {
     "crisis":    (CRISIS_REPLY,        "crisis",    "紧急干预 > 心理安抚"),
@@ -329,7 +374,9 @@ def chat():
         reply_text, reply_source = p["answer"], "policy"
         reply_meta = {"match_question": p["question"], "score": p["score"], "law_basis": p.get("law",""), "law_code": p.get("law_code","")}
     elif ai:
-        r = ai.ask_with_rag(question=question, kb_contexts=search["top_k"], history=history,
+        # 拼接多个FAQ作为上下文，让AI总结而非照抄
+        faq_context = search.get("top_k", [])[:5]
+        r = ai.ask_with_rag(question=question, kb_contexts=faq_context, history=history,
                             standard_question=biz["standard_question"], category=biz["category"],
                             match_score=search["best_score"])
         if r:
