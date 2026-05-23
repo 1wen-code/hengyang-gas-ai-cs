@@ -277,13 +277,26 @@ def chat():
         if mismatch:
             faq_ok = False
 
-        # 回复相关性检查：FAQ答案与用户问题不匹配时降级
-        if faq_ok and faq_score < 0.50:
+        # 回复相关性检查：FAQ答案与用户问题场景不匹配时降级
+        if faq_ok:
             faq_ans = search["faq"]["answer"] if search["faq"] else ""
-            # 答案过短或含维修准备类模板内容 → 可能是不相关匹配
-            vague_patterns = ["准备什么", "维修师傅", "预约", "签验收"]  
-            if any(p in faq_ans for p in vague_patterns):
+            faq_q = search["faq"]["question"] if search["faq"] else ""
+            understand_scene = understand.get("possible_scene", "")
+
+            # 模板型/不相关答案关键词
+            vague_patterns = ["准备什么", "维修师傅", "预约", "签验收", "锅底发黑", "锅底", "烧黑"]
+            if any(p in faq_ans or p in faq_q for p in vague_patterns):
                 faq_ok = False
+
+            # UNDERSTAND场景与FAQ问题场景不一致
+            scene_mismatch = [
+                ("热水器", "灶"), ("灶", "热水器"),
+                ("热水器", "锅"), ("灶", "锅"),
+            ]
+            for a, b in scene_mismatch:
+                if a in understand_scene and b in faq_q:
+                    faq_ok = False
+                    break
 
         # AI自主判断：分类器高置信 + FAQ低分 → 让AI自己思考
         if faq_ok and cls_conf >= 0.80 and faq_score < 0.45:
