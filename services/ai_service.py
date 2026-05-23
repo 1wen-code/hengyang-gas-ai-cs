@@ -315,9 +315,14 @@ class AIService:
         self._client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
 
     def ask_with_rag(self, question: str, kb_contexts: list[dict],
-                     history: list[dict] = None) -> str | None:
-        """RAG上下文注入DeepSeek，支持多轮对话"""
+                     history: list[dict] = None,
+                     standard_question: str = "",
+                     category: str = "",
+                     match_score: float = 0.0) -> str | None:
+        """RAG上下文注入DeepSeek，支持多轮对话 + 意图理解增强"""
+        # 构建知识库上下文
         parts = []
+        best_score = match_score
         for i, ctx in enumerate(kb_contexts, 1):
             parts.append(
                 f"【参考{i}】\n"
@@ -326,6 +331,8 @@ class AIService:
                 f"来源：{ctx.get('source', '')}\n"
                 f"法规：{ctx.get('law', '')}（{ctx.get('law_code', '')}）"
             )
+            if ctx.get('score', 0) > best_score:
+                best_score = ctx['score']
         context_text = "\n\n".join(parts) if parts else "无相关知识库内容"
 
         # 构建消息列表
@@ -336,14 +343,27 @@ class AIService:
             for h in history[-6:]:
                 messages.append(h)
 
-        # 当前提问
-        user_msg = f"""## 知识库上下文
-{context_text}
+        # 当前提问 — 使用新的RAG回复模板
+        rewrite = standard_question or question
+        cat = category or "其他"
+        score_pct = f"{best_score:.0%}" if best_score > 0 else "低于阈值"
 
-## 用户提问
+        user_msg = f"""## 用户问题
 {question}
 
-请基于知识库上下文回答。如上下文无相关信息，请理解用户真实意图，尝试提供最接近的业务引导，或建议拨打客服热线0734-8677777。"""
+## 标准问题（意图理解改写）
+{rewrite}
+
+## 业务分类
+{cat}
+
+## 知识库内容
+{context_text}
+
+## 知识库匹配度
+{score_pct}
+
+请基于以上信息回答用户。如知识库匹配度较低（<30%），请回复："暂未查询到准确业务信息，建议联系人工客服热线0734-8677777进一步咨询。" 涉及安全问题时优先输出安全提醒。"""
 
         messages.append({"role": "user", "content": user_msg})
 
@@ -382,3 +402,428 @@ class AIService:
             return None
         except Exception:
             return None
+
+
+# ── 用户意图理解模块（LLM深度理解）────────────────
+
+INTENT_UNDERSTANDING_PROMPT = """你是衡阳燃气AI客服系统中的"用户意图理解模块"。
+
+你的任务：理解用户真实业务需求。
+
+即使用户使用：
+* 口语
+* 方言
+* 长句
+* 情绪化表达
+
+也必须识别真实意图。
+
+要求：
+1. 不要只看关键词 — 理解用户真正想解决的问题
+2. 即使带有情绪（生气、焦虑、抱怨），也要抽出背后的业务诉求
+3. 转换为一句通顺的标准业务问题
+4. 输出业务分类
+
+业务分类（只从以下选择）：
+* 缴费业务 — 充值、缴费、欠费、余额、发票、账单、气价、阶梯价
+* 开户业务 — 新装、开户、报装、过户、销户、改管
+* 安全用气 — 漏气、泄漏、异味、报警器、通风、中毒、安检
+* 燃气灶故障 — 打不着火、火焰异常、熄火、火盖堵塞、电池
+* 热水器故障 — 不出热水、水温异常、热水器报错、点火失败
+* 报修维修 — 设备维修、管道维修、上门维修、表具故障
+* 停气问题 — 停气、气压低、断气、供气恢复
+* 人工客服 — 要求转人工、投诉跟进、紧急工单查询
+* 投诉建议 — 服务投诉、意见反馈、赔偿要求
+* 其他 — 闲聊、问候、非燃气问题
+
+输出格式（严格按此格式，不要多余文字）：
+
+【真实意图】
+xxx
+
+【标准问题】
+xxx
+
+【业务分类】
+xxx"""
+
+
+class IntentUnderstandingService:
+    """LLM 用户意图理解 — 深度语义理解，处理口语/方言/长句/情绪化表达"""
+
+    def __init__(self, client: OpenAI):
+        self._client = client
+
+    def understand(self, question: str) -> dict:
+        """
+        调用 DeepSeek 深度理解用户意图。
+
+        返回:
+            {
+                "real_intent": "真实意图描述",
+                "standard_question": "标准业务问题",
+                "category": "业务分类",
+                "raw_response": "原始LLM回复"
+            }
+            失败时返回 None
+        """
+        try:
+            resp = self._client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
+                messages=[
+                    {"role": "system", "content": INTENT_UNDERSTANDING_PROMPT},
+                    {"role": "user", "content": question},
+                ],
+                temperature=0.1,
+                max_tokens=300,
+            )
+            raw = resp.choices[0].message.content.strip()
+            return self._parse(raw, question)
+        except Exception:
+            return None
+
+    def _parse(self, response: str, question: str) -> dict:
+        """解析LLM的结构化输出"""
+        import re
+
+        real_intent = ""
+        standard_question = ""
+        category = "其他"
+
+        m = re.search(r"【真实意图】\s*(.+?)(?=【标准问题】|$)", response, re.DOTALL)
+        if m:
+            real_intent = m.group(1).strip()
+
+        m = re.search(r"【标准问题】\s*(.+?)(?=【业务分类】|$)", response, re.DOTALL)
+        if m:
+            standard_question = m.group(1).strip()
+
+        m = re.search(r"【业务分类】\s*(.+?)$", response, re.DOTALL)
+        if m:
+            category = m.group(1).strip()
+
+        if not real_intent:
+            real_intent = question
+        if not standard_question:
+            standard_question = question
+
+        return {
+            "real_intent": real_intent,
+            "standard_question": standard_question,
+            "category": category,
+            "raw_response": response,
+        }
+
+
+# ── 风险识别模块（LLM深度判别，独立运行）─────────
+
+RISK_DETECTION_PROMPT = """你是燃气AI客服系统中的"风险识别模块"。
+
+你的任务：识别用户问题中的风险等级。
+
+风险等级：
+
+【高危】
+* 漏气
+* 爆炸
+* 火灾
+* 中毒
+* 报警器响
+* 人员受伤
+
+【中危】
+* 停气
+* 无法点火
+* 故障
+* 投诉
+* 情绪激动
+
+【低危】
+普通业务咨询。
+
+输出格式（严格按此格式，不要多余文字）：
+
+【风险等级】
+xxx
+
+【风险原因】
+xxx
+
+【是否生成工单】
+是/否
+
+【是否转人工】
+是/否"""
+
+
+class RiskDetectionService:
+    """LLM 风险识别 — 独立运行，深度语义判断用户问题中的安全风险等级"""
+
+    def __init__(self, client: OpenAI):
+        self._client = client
+
+    def detect(self, question: str) -> dict:
+        """
+        调用 DeepSeek 识别用户问题的风险等级。
+
+        返回:
+            {
+                "risk_level": "高危" | "中危" | "低危",
+                "risk_reason": "风险原因说明",
+                "create_ticket": True | False,
+                "transfer_human": True | False,
+                "raw_response": "原始LLM回复"
+            }
+            失败时返回 None
+        """
+        try:
+            resp = self._client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
+                messages=[
+                    {"role": "system", "content": RISK_DETECTION_PROMPT},
+                    {"role": "user", "content": question},
+                ],
+                temperature=0.0,
+                max_tokens=200,
+            )
+            raw = resp.choices[0].message.content.strip()
+            return self._parse(raw)
+        except Exception:
+            return None
+
+    def _parse(self, response: str) -> dict:
+        """解析LLM的结构化风险输出"""
+        import re
+
+        risk_level = "低危"
+        risk_reason = ""
+        create_ticket = False
+        transfer_human = False
+
+        m = re.search(r"【风险等级】\s*(.+?)(?=【风险原因】|$)", response, re.DOTALL)
+        if m:
+            risk_level = m.group(1).strip()
+
+        m = re.search(r"【风险原因】\s*(.+?)(?=【是否生成工单】|$)", response, re.DOTALL)
+        if m:
+            risk_reason = m.group(1).strip()
+
+        m = re.search(r"【是否生成工单】\s*(.+?)(?=【是否转人工】|$)", response, re.DOTALL)
+        if m:
+            create_ticket = "是" in m.group(1)
+
+        m = re.search(r"【是否转人工】\s*(.+?)$", response, re.DOTALL)
+        if m:
+            transfer_human = "是" in m.group(1)
+
+        return {
+            "risk_level": risk_level,
+            "risk_reason": risk_reason,
+            "create_ticket": create_ticket,
+            "transfer_human": transfer_human,
+            "raw_response": response,
+        }
+
+    def compare_with_keyword(self, question: str, keyword_result: dict) -> dict:
+        """
+        对比 LLM 风险识别与关键词规则的结果，返回综合评估。
+
+        keyword_result: detect_emergency() 的返回值 {level, risk_label, ...}
+
+        返回:
+            {
+                "llm_risk": LLM识别结果,
+                "keyword_risk": 关键词规则结果,
+                "verdict": "agree" | "llm_upgrade" | "llm_downgrade" | "llm_only",
+                "final_level": 最终建议等级,
+                "final_action": 最终建议动作,
+            }
+        """
+        llm_result = self.detect(question)
+
+        if llm_result is None:
+            return {
+                "llm_risk": None,
+                "keyword_risk": keyword_result,
+                "verdict": "keyword_only",
+                "final_level": keyword_result["level"],
+                "final_action": keyword_result.get("action", ""),
+            }
+
+        # 等级映射
+        llm_level_map = {"高危": 3, "中危": 2, "低危": 1}
+        kw_level = keyword_result["level"]
+        llm_level = llm_level_map.get(llm_result["risk_level"], 1)
+
+        if llm_level == kw_level:
+            verdict = "agree"
+        elif llm_level > kw_level:
+            verdict = "llm_upgrade"
+        else:
+            verdict = "llm_downgrade"
+
+        # 综合建议：取两者中较高的等级（安全优先）
+        final_level = max(llm_level, kw_level)
+        final_level_label = {3: "高危", 2: "中危", 1: "低危"}[final_level]
+
+        return {
+            "llm_risk": llm_result,
+            "keyword_risk": {
+                "level": kw_level,
+                "risk_label": keyword_result.get("risk_label", ""),
+                "matched": keyword_result.get("matched", []),
+                "reason": keyword_result.get("reason", ""),
+            },
+            "verdict": verdict,
+            "final_level": final_level,
+            "final_level_label": final_level_label,
+        }
+
+
+# ── 工单生成模块（LLM生成，最后运行）─────────────
+
+TICKET_GENERATION_PROMPT = """你是燃气AI客服系统中的工单生成模块。
+
+请根据用户问题和风险等级，生成标准客服工单。
+
+输出格式（严格按此格式，不要多余文字）：
+
+【工单编号】
+（留空，由系统自动生成）
+
+【业务类型】
+xxx
+
+【风险等级】
+xxx
+
+【问题摘要】
+xxx
+
+【处理建议】
+xxx
+
+【是否人工介入】
+是/否"""
+
+
+class TicketGenerationService:
+    """LLM 工单生成 — 独立运行，根据用户问题和风险结果生成标准工单"""
+
+    def __init__(self, client: OpenAI):
+        self._client = client
+
+    def generate(self, question: str, risk_result: dict) -> dict:
+        """
+        调用 DeepSeek 生成标准客服工单。
+
+        risk_result 可以是 RiskDetectionService.detect() 的返回，
+        或 detect_emergency() 的返回，或 compare_with_keyword() 的返回。
+
+        返回:
+            {
+                "ticket_id": "自动生成的工单编号",
+                "business_type": "业务类型",
+                "risk_level": "风险等级",
+                "summary": "问题摘要",
+                "suggestion": "处理建议",
+                "human_intervention": True | False,
+                "raw_response": "原始LLM回复"
+            }
+            失败时返回 None
+        """
+        # 将风险结果序列化为可读文本
+        risk_text = self._format_risk(risk_result)
+
+        try:
+            resp = self._client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
+                messages=[
+                    {"role": "system", "content": TICKET_GENERATION_PROMPT},
+                    {"role": "user", "content": f"用户问题：{question}\n\n风险结果：{risk_text}"},
+                ],
+                temperature=0.1,
+                max_tokens=300,
+            )
+            raw = resp.choices[0].message.content.strip()
+            return self._parse(raw)
+        except Exception:
+            return None
+
+    def _format_risk(self, risk_result: dict) -> str:
+        """将风险结果格式化为文本"""
+        parts = []
+
+        # 处理不同的 risk_result 格式
+        if "risk_level" in risk_result:
+            parts.append(f"风险等级：{risk_result['risk_level']}")
+        elif "level" in risk_result:
+            level_map = {3: "高危", 2: "中危", 1: "低危"}
+            parts.append(f"风险等级：{level_map.get(risk_result['level'], '未知')}")
+
+        if "risk_reason" in risk_result:
+            parts.append(f"风险原因：{risk_result['risk_reason']}")
+        elif "reason" in risk_result:
+            parts.append(f"风险原因：{risk_result['reason']}")
+
+        if "risk_label" in risk_result:
+            parts.append(f"风险标签：{risk_result['risk_label']}")
+
+        if "matched" in risk_result and risk_result["matched"]:
+            parts.append(f"命中关键词：{', '.join(risk_result['matched'])}")
+
+        if "final_level_label" in risk_result:
+            parts.append(f"综合等级：{risk_result['final_level_label']}")
+
+        if "verdict" in risk_result:
+            parts.append(f"判定方式：{risk_result['verdict']}")
+
+        return "\n".join(parts) if parts else str(risk_result)
+
+    def _parse(self, response: str) -> dict:
+        """解析LLM的结构化工单输出"""
+        import re, uuid
+        from datetime import datetime
+
+        ticket_id = f"TK-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+        business_type = ""
+        risk_level = ""
+        summary = ""
+        suggestion = ""
+        human_intervention = False
+
+        m = re.search(r"【工单编号】\s*(.+?)(?=【业务类型】|$)", response, re.DOTALL)
+        if m:
+            raw_id = m.group(1).strip()
+            if raw_id and raw_id != "（留空，由系统自动生成）":
+                ticket_id = raw_id
+
+        m = re.search(r"【业务类型】\s*(.+?)(?=【风险等级】|$)", response, re.DOTALL)
+        if m:
+            business_type = m.group(1).strip()
+
+        m = re.search(r"【风险等级】\s*(.+?)(?=【问题摘要】|$)", response, re.DOTALL)
+        if m:
+            risk_level = m.group(1).strip()
+
+        m = re.search(r"【问题摘要】\s*(.+?)(?=【处理建议】|$)", response, re.DOTALL)
+        if m:
+            summary = m.group(1).strip()
+
+        m = re.search(r"【处理建议】\s*(.+?)(?=【是否人工介入】|$)", response, re.DOTALL)
+        if m:
+            suggestion = m.group(1).strip()
+
+        m = re.search(r"【是否人工介入】\s*(.+?)$", response, re.DOTALL)
+        if m:
+            human_intervention = "是" in m.group(1)
+
+        return {
+            "ticket_id": ticket_id,
+            "business_type": business_type,
+            "risk_level": risk_level,
+            "summary": summary,
+            "suggestion": suggestion,
+            "human_intervention": human_intervention,
+            "raw_response": response,
+        }
