@@ -1318,3 +1318,53 @@ class SessionStateService:
                 }
 
         return {"new_state": new_state, "state_reason": "", "should_confirm_safety": False, "safety_reminder": ""}
+
+
+# ── 多轮追问子类型识别 ─────────────────────────
+
+class FollowUpSubtypeDetector:
+    """多轮对话追问子类型识别 — 判断用户短问题属于哪类追问"""
+
+    SUBTYPE_PATTERNS = {
+        "time": [r"多久", r"多长时间", r"几天", r"什么时候", r"何时",
+                 r"几个工作日", r"要等多久", r"需要多久", r"一般多久"],
+        "fee": [r"多少钱", r"费用", r"收费", r"价格", r"怎么收费",
+                r"要多少钱", r"贵不贵", r"收费标准", r"阶梯"],
+        "material": [r"什么材料", r"需要什么", r"准备什么", r"带什么",
+                     r"证件", r"资料", r"哪些东西", r"要带.*材料"],
+        "location": [r"在哪里", r"去哪里", r"什么地方", r"地址",
+                     r"哪个营业厅", r"网点", r"去哪", r"在哪"],
+        "phone": [r"电话", r"号码", r"热线", r"联系方式", r"怎么联系", r"打哪个"],
+        "process": [r"流程", r"步骤", r"怎么办", r"怎么办理",
+                    r"怎么操作", r"怎么弄", r"如何办", r"手续"],
+        "condition": [r"条件", r"要求", r"资格", r"能不能",
+                      r"可以吗", r"行不行", r"需要满足", r"符合"],
+    }
+
+    # 子类型 → 搜索增强关键词（用于FAQ检索时加权）
+    SUBTYPE_BOOST_KW = {
+        "time": ["时间", "多久", "工作日", "天数", "完成", "周期"],
+        "fee": ["费用", "价格", "收费", "元", "阶梯", "标准"],
+        "material": ["材料", "证件", "资料", "准备", "身份证", "房产证"],
+        "location": ["地址", "营业厅", "网点", "办理点", "石鼓", "珠晖", "华新"],
+        "phone": ["电话", "热线", "联系方式", "8677777"],
+        "process": ["流程", "步骤", "办理", "申请", "审核", "安装"],
+        "condition": ["条件", "要求", "资格", "低保", "残疾", "优惠"],
+    }
+
+    @classmethod
+    def detect(cls, question: str) -> str | None:
+        """检测追问子类型。短问题(≤15字)才做检测，返回子类型或None"""
+        q = question.strip()
+        if len(q) > 15:
+            return None
+        for subtype, patterns in cls.SUBTYPE_PATTERNS.items():
+            for p in patterns:
+                if re.search(p, q):
+                    return subtype
+        return None
+
+    @classmethod
+    def get_boost_keywords(cls, subtype: str) -> list[str]:
+        """获取子类型对应的搜索加权关键词"""
+        return cls.SUBTYPE_BOOST_KW.get(subtype, [])

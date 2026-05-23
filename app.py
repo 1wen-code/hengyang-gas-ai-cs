@@ -9,6 +9,7 @@ from services.understand_service import UnderstandService
 from services.ai_service import (
     AIService, IntentDetector, IntentUnderstandingService, RiskDetectionService,
     TicketGenerationService, IntentClassifierService, EmotionDetectionService, FuzzyDetectionService, SessionStateService,
+    FollowUpSubtypeDetector,
     REJECT_REPLY, GREETING_REPLY, IDENTITY_REPLY, BUSINESS_GUIDE_REPLY,
     REFUND_REPLY, EMOTION_REPLY, EMOTION_LIGHT_REPLY, CRISIS_REPLY, COMPLAINT_REPLY,
 )
@@ -213,6 +214,12 @@ def chat():
 
     import time as _time
     _start_time = _time.time()
+
+    # === 0.5 多轮追问上下文 ===
+    previous_topic = session.get("current_topic", "")
+    previous_faq_question = session.get("previous_faq_question", "")
+    followup_subtype = FollowUpSubtypeDetector.detect(question)
+
     # === 1. 上下文记忆 ===
     server_memory = session.get("conversation_memory", [])
     seen = set()
@@ -306,6 +313,34 @@ def chat():
             search["policy"] = kb.search_policy(question)
         search["top_k"] = kb.search_top_k(sq, k=8)
         search["best_score"] = search["faq"]["score"] if search["faq"] else (search["top_k"][0]["score"] if search["top_k"] else 0.0)
+
+    # === 7.5 追问子类型引导 + 已答FAQ去重 ===
+    if followup_subtype and previous_topic:
+        boost_kw = FollowUpSubtypeDetector.get_boost_keywords(followup_subtype)
+        # 去重：同一FAQ不再重复返回
+        if search["faq"] and previous_faq_question:
+            if search["faq"]["question"] == previous_faq_question:
+                search["faq"] = None
+                # 从 top_k 中找下一个不重复且子类型匹配的
+                for item in search.get("top_k", []):
+                    if item["question"] != previous_faq_question:
+                        subtype_match = any(kw in item.get("question","") or kw in item.get("answer","") for kw in boost_kw)
+                        if subtype_match and item.get("score", 0) >= 0.12:
+                            search["faq"] = item
+                            break
+                # 退而求其次：不要求子类型匹配
+                if not search["faq"]:
+                    for item in search.get("top_k", []):
+                        if item["question"] != previous_faq_question and item.get("score", 0) >= 0.15:
+                            search["faq"] = item
+                            break
+        # 子类型引导：用 boost 关键词重新搜索
+        if not search["faq"] or search["faq"]["score"] < 0.25:
+            sq_boost = question + " " + " ".join(boost_kw[:3])
+            boosted = kb.search_faq(sq_boost)
+            if boosted and boosted["question"] != previous_faq_question:
+                search["faq"] = boosted
+                search["best_score"] = max(search["best_score"], boosted["score"])
 
     # === 8. 相似度过滤 + 类别一致性 + AI自主判断 ===
     faq_ok = search["faq"] and search["faq"]["score"] >= 0.20
@@ -479,6 +514,12 @@ def chat():
         st["risk_active"] = risk_active or (isinstance(risk, dict) and risk.get("level", 0) >= 2)
         st["safe_confirm_count"] = safe_confirm_count
         session["conversation_state"] = st
+        # 保存话题上下文 + 已答FAQ（多轮追问用）
+        if biz.get("category"):
+            session["current_topic"] = biz["category"]
+        if reply_source == "faq" and search.get("faq"):
+            session["previous_faq_question"] = search["faq"]["question"]
+            session["previous_faq_answer"] = search["faq"]["answer"]
     except:
         pass
 
