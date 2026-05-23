@@ -137,6 +137,8 @@
     <span class="status-dot"><span class="dot dot-green"></span> 风险检测</span>
     <span class="status-dot"><span class="dot dot-green"></span> 会话状态机</span>
     <span class="status-dot"><span class="dot dot-green"></span> 热更新就绪</span>
+    <span class="status-dot"><span class="dot dot-green"></span> UNDERSTAND层</span>
+    <span class="status-dot"><span class="dot dot-green"></span> 意图分类:在线</span>
 </div>
 
 <!-- 统计卡片 -->
@@ -170,7 +172,7 @@
     <button class="btn btn-purple" onclick="document.getElementById('fileInput').click()">上传Excel更新</button>
     <button class="btn btn-outline" onclick="location.reload()">刷新数据</button>
     <input type="file" id="fileInput" accept=".xlsx,.csv" onchange="uploadKB()" style="display:none;">
-    <button class="btn btn-red" onclick="clearTickets()" style="margin-left:auto;">清除工单</button>
+    <button class="btn btn-red" onclick="clearTickets()" style="margin-left:auto;">归档已完成</button>
 </div>
 <div id="msg"></div>
 
@@ -179,14 +181,14 @@
 <div class="alert-list">
     {% if tickets %}
     {% for t in (tickets|reverse|list)[:5] %}
-    <div class="alert-item {{ 'medium' if t.get('风险等级','') not in ('高危','紧急') else '' }}">
+    <div class="alert-item" onclick="this.querySelector('.alert-detail').style.display=this.querySelector('.alert-detail').style.display=='none'?'block':'none'" style="cursor:pointer" {{ 'medium' if t.get('风险等级','') not in ('高危','紧急') else '' }}">
         <span class="alert-dot {{ 'high' if t.get('风险等级','') in ('高危','紧急') else 'medium' }}"></span>
         <span>"{{ t.get('用户问题', '')[:40] }}"</span>
-        <span class="alert-time">{{ t.get('时间', '')[-8:] if t.get('时间','')|length > 8 else t.get('时间','') }}</span>
+        <div class="alert-detail" style="display:none;margin-top:6px;font-size:11px;color:var(--dimmer)">点击查看完整AI分析</div><span class="alert-time">{{ t.get('时间', '')[-8:] if t.get('时间','')|length > 8 else t.get('时间','') }}</span>
     </div>
     {% endfor %}
     {% else %}
-    <div class="alert-item medium">
+    <div class="alert-item" onclick="this.querySelector('.alert-detail').style.display=this.querySelector('.alert-detail').style.display=='none'?'block':'none'" style="cursor:pointer" medium">
         <span class="alert-dot medium"></span>
         <span>暂无风险事件，系统正常运行</span>
     </div>
@@ -194,6 +196,20 @@
 </div>
 
 <!-- 工单列表（卡片式） -->
+<h2>AI 决策链状态</h2>
+<div class="status-bar" style="margin-bottom:16px">
+    <span class="status-dot">用户输入 →</span>
+    <span class="status-dot"><span class="dot dot-green"></span> UNDERSTAND</span>
+    <span class="status-dot">→</span>
+    <span class="status-dot"><span class="dot dot-green"></span> 意图分类</span>
+    <span class="status-dot">→</span>
+    <span class="status-dot"><span class="dot dot-green"></span> 风险识别</span>
+    <span class="status-dot">→</span>
+    <span class="status-dot"><span class="dot dot-green"></span> RAG检索</span>
+    <span class="status-dot">→</span>
+    <span class="status-dot"><span class="dot dot-green"></span> 回答生成</span>
+</div>
+
 <h2>风险趋势（近7天）</h2>
 <div class="chart-legend">
     <span><span class="legend-dot" style="background:var(--red)"></span> 高风险</span>
@@ -217,6 +233,9 @@
             </span>
         </div>
         <div class="ticket-question">{{ t.get('用户问题', '')[:60] }}</div>
+                        <div style="font-size:10px;color:var(--dimmer);margin-bottom:4px">
+                            触发：{{ t.get('用户问题', '')[:30] }} | 处理人：{{ t.get('处理人', '调度中心') }}
+                        </div>
         <div class="ticket-meta">
             <span>{{ t.get('时间', '') }}</span>
         </div>
@@ -247,7 +266,16 @@
 
 <h2>安全日志</h2>
 <div class="log" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;font-family:monospace;font-size:12px;max-height:200px;overflow-y:auto;white-space:pre-wrap;color:var(--muted);">
-{% for l in logs %}{{ l }}{% endfor %}
+{% for l in logs %}
+{% set parts = l.split(" ") %}
+{% if "高危" in l or "HIGH" in l|upper %}
+<span style="color:var(--red)">[{{ l[:19] }}] 系统检测到高风险燃气事件</span>
+{% elif "疑似" in l or "MEDIUM" in l|upper %}
+<span style="color:var(--orange)">[{{ l[:19] }}] 系统检测到疑似风险事件</span>
+{% else %}
+<span style="color:var(--dimmer)">[{{ l[:19] }}] {{ l[20:] }}</span>
+{% endif %}
+{% endfor %}
 </div>
 
 <!-- 工单详情弹窗 -->
@@ -287,7 +315,7 @@ function resolveTicket(id) {
     });
 }
 function clearTickets() {
-    if(!confirm("确定清除所有工单记录？此操作不可恢复。")) return;
+    if(!confirm("确定归档所有已完成工单？此操作不可恢复。")) return;
     fetch("/admin/tickets/clear", {method:"POST"}).then(r=>r.json()).then(d=>{
         document.getElementById("msg").innerHTML = '<span style=color:'+(d.status=="ok"?"#22c55e":"#ef4444")+'">'+d.message+'</span>';
         if(d.status=="ok") setTimeout(function(){location.reload();}, 1000);
@@ -317,9 +345,16 @@ fetch("/admin/chat-logs").then(r=>r.json()).then(data=>{
         var rt = row['风险等级'] || '普通';
         var tag = rt.includes('高') ? '<span class="tag tag-high" style="font-size:9px">'+rt+'</span>' :
                   rt.includes('中') || rt.includes('疑似') ? '<span class="tag tag-medium" style="font-size:9px">'+rt+'</span>' : '';
-        html += '<div class="entry"><span class="user" style="font-size:11px">'+escHtml(row['用户问题']||'')+'</span>';
+        var qText = escHtml(row['用户问题']||'').substring(0, 40);
+        var aText = escHtml(row['AI回答']||'').substring(0, 40);
+        html += '<div class="entry" style="cursor:pointer" onclick="this.querySelector('.full').style.display=this.querySelector('.full').style.display=='none'?'block':'none'">';
+        html += '<span class="user" style="font-size:11px">'+qText+'</span>';
         html += ' <span style="color:var(--dimmer);font-size:10px">→</span> ';
-        html += '<span class="ai" style="font-size:11px">'+escHtml(row['AI回答']||'').substring(0,50)+'</span>'+tag+'</div>';
+        html += '<span class="ai" style="font-size:11px">'+aText+'</span>'+tag;
+        html += '<div class="full" style="display:none;margin-top:4px;padding:6px;background:var(--bg);border-radius:6px;font-size:11px;color:var(--muted)">';
+        html += '<div>用户：'+escHtml(row['用户问题']||'')+'</div>';
+        html += '<div>AI：'+escHtml(row['AI回答']||'')+'</div>';
+        html += '</div></div>';
     });
     document.getElementById("chatLog").innerHTML = html;
 }).catch(function(){ document.getElementById("chatLog").innerHTML = '<div style="color:var(--dimmer);font-size:12px">加载失败</div>'; });
@@ -343,7 +378,7 @@ fetch("/admin/risk-trends").then(r=>r.json()).then(data=>{
         html += '</div><div class="date">'+dLabel+'</div></div>';
     });
     document.getElementById("trendBar").innerHTML = html;
-}).catch(function(){ document.getElementById("trendBar").innerHTML = '<div style="color:var(--dimmer);font-size:12px;padding:20px">暂无数据</div>'; });
+}).catch(function(){ document.getElementById("trendBar").innerHTML = '<div style="color:var(--muted);font-size:13px;padding:30px;text-align:center">近7天暂无风险事件<br><span style="color:var(--dimmer);font-size:11px">系统正常运行中</span></div>'; });
 
 function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 </script>

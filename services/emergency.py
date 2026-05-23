@@ -125,8 +125,9 @@ def generate_ticket(question: str, risk_level: str, ip: str = "", user_session: 
     ticket = {
         "工单ID": ticket_id, "时间": created_at,
         "用户问题": question, "风险等级": risk_level,
-        "分类": "紧急事件", "状态": "处理中", "用户IP": ip,
-        "用户标识": user_session,
+        "分类": "紧急事件", "状态": "处理中",
+        "处理人": "调度中心A组",
+        "用户IP": ip, "用户标识": user_session,
     }
     os.makedirs(os.path.dirname(TICKETS_PATH), exist_ok=True)
     fieldnames = list(ticket.keys())

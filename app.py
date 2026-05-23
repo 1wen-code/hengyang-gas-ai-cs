@@ -129,7 +129,9 @@ def chat():
     if not question:
         return jsonify({"error": "消息不能为空"}), 400
     client_history = data.get("history", [])
-    client_ip = request.remote_addr or ""
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr) or ""
+    if client_ip == "127.0.0.1":
+        client_ip = request.remote_addr or ""
 
     
     history = []  # 初始化，后续在上下文记忆中赋值
@@ -212,7 +214,9 @@ def chat():
                 over_assoc_warn = f"（注意：{rule['block_reason']}）"
                 question = question + over_assoc_warn
 
-# === 1. 上下文记忆 ===
+    import time as _time
+    _start_time = _time.time()
+    # === 1. 上下文记忆 ===
     server_memory = session.get("conversation_memory", [])
     seen = set()
     merged = []
