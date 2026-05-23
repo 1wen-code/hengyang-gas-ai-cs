@@ -274,10 +274,18 @@ def chat():
             for a, b in danger_pairs
         )
         if mismatch:
-            faq_ok = False  # 类别不匹配，降级走 RAG
+            faq_ok = False
+
+        # 回复相关性检查：FAQ答案与用户问题不匹配时降级
+        if faq_ok and faq_score < 0.50:
+            faq_ans = search["faq"]["answer"] if search["faq"] else ""
+            # 答案过短或含维修准备类模板内容 → 可能是不相关匹配
+            vague_patterns = ["准备什么", "维修师傅", "预约", "签验收"]  
+            if any(p in faq_ans for p in vague_patterns):
+                faq_ok = False
 
         # AI自主判断：分类器高置信 + FAQ低分 → 让AI自己思考
-        if faq_ok and cls_conf >= 0.80 and faq_score < 0.40:
+        if faq_ok and cls_conf >= 0.80 and faq_score < 0.45:
             # 分类器很确定意图，但 FAQ 匹配度偏低，可能是知识库没有精确匹配
             # 让 AI 结合分类结果自主推理，不用模糊的 FAQ 回答
             faq_ok = False
