@@ -137,6 +137,7 @@
                     return { role: m.role === "user" ? "user" : "assistant", content: m.content };
                 }),
             }),
+            signal: AbortSignal.timeout(25000),
         })
             .then(function (res) { return res.json(); })
             .then(function (data) {
