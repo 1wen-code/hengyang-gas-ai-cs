@@ -87,6 +87,7 @@ def chat():
     client_ip = request.remote_addr or ""
 
     
+    history = []  # 初始化，后续在上下文记忆中赋值
     # === 0. 状态机优先判断 ===
     try:
         conversation_state = session.get("conversation_state", {}) or {}
