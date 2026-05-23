@@ -112,6 +112,7 @@ def chat():
 
     # 风险冷却机制：需要连续2次安全确认才能解除风险
     risk_active = conversation_state.get("risk_active", False)
+    risk_locked = session.get("risk_locked", False) or risk_active
     safety_confirm_words = ["没味了", "没味道了", "关了", "关好了", "通风了", "不晕了",
                             "修好了", "换好了", "正常了", "解决了", "没事了", "好了"]
     safety_count = sum(1 for w in safety_confirm_words if w in question)
@@ -340,7 +341,8 @@ def chat():
                    "standard_question": biz["standard_question"], "category": biz["category"]},
         "emotion": emotion,
         "fuzzy": fuzzy,
-        "risk_locked": risk_locked,
+        "fuzzy": fuzzy,
+        "session_state": {"current": state_result.get("new_state", "normal"), "previous": prev_state, "should_confirm_safety": state_result.get("should_confirm_safety", False)},
         "session_state": {"current": state_result.get("new_state", "normal"), "previous": prev_state, "should_confirm_safety": state_result.get("should_confirm_safety", False)},
         "risk": {"level": risk["level"], "label": risk["label"], "reason": risk["reason"]},
         "classification": classification,
