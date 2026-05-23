@@ -1275,3 +1275,118 @@ class FuzzyDetectionService:
 
     def _default(self) -> dict:
         return {"is_fuzzy": False, "reason": "", "suggested_question": ""}
+
+
+# ── 会话状态跟踪模块（维护对话状态机）─────────
+
+SESSION_STATE_PROMPT = """你是燃气AI客服的"会话状态管理模块"。
+
+维护用户当前会话状态。
+
+可用状态：
+
+1. normal（普通咨询）
+2. troubleshooting（故障排查）
+3. dangerous（高危危险）
+4. emergency（紧急事故）
+5. resolved（风险解除）
+6. human_transfer（转人工）
+
+状态切换规则：
+
+- 出现：漏气、臭鸡蛋味、头晕、砰、爆燃、火焰异常 → dangerous
+- 出现：晕倒、昏迷、多人不适、着火 → emergency
+- 用户说：好了、没事了、恢复了、已经处理 → resolved
+
+特别规则：
+
+如果上一轮状态是 dangerous 或 emergency，
+用户说"没事了""好了"等结束语时：
+
+禁止直接退出上下文。
+
+应该：
+1. 先确认安全
+2. 提醒继续观察
+3. 提醒异常继续联系
+4. 再礼貌结束
+
+---
+
+当前会话状态：{current_state}
+上一轮风险等级：{risk_level}
+当前用户消息：{question}
+
+输出 JSON：
+{{
+"new_state": "",
+"state_reason": "",
+"should_confirm_safety": false,
+"safety_reminder": ""
+}}"""
+
+
+class SessionStateService:
+    """会话状态机 — 跟踪对话状态，防止高危状态被意外重置"""
+
+    def __init__(self, client: OpenAI):
+        self._client = client
+
+    def evaluate(self, question: str, current_state: str, risk_level: str) -> dict:
+        try:
+            prompt = SESSION_STATE_PROMPT.format(
+                current_state=current_state,
+                risk_level=risk_level,
+                question=question,
+            )
+            resp = self._client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
+                messages=[{"role": "system", "content": prompt}],
+                temperature=0.0,
+                max_tokens=200,
+            )
+            raw = resp.choices[0].message.content.strip()
+            return self._parse(raw)
+        except Exception:
+            return self._fallback(question, current_state, risk_level)
+
+    def _parse(self, raw: str) -> dict:
+        import json, re
+        m = re.search(r'\{[\s\S]*\}', raw)
+        if m: raw = m.group(0)
+        try:
+            data = json.loads(raw)
+            return {
+                "new_state": data.get("new_state", "normal"),
+                "state_reason": data.get("state_reason", ""),
+                "should_confirm_safety": data.get("should_confirm_safety", False),
+                "safety_reminder": data.get("safety_reminder", ""),
+            }
+        except:
+            return {"new_state": "normal", "state_reason": "", "should_confirm_safety": False, "safety_reminder": ""}
+
+    def _fallback(self, question: str, current_state: str, risk_level: str) -> dict:
+        """本地规则兜底：不需要LLM也能判断基本状态切换"""
+        new_state = current_state
+
+        # 危险关键词 → emergency/dangerous
+        emergency_kw = ["晕倒", "昏迷", "着火", "没有呼吸", "心跳"]
+        danger_kw = ["漏气", "泄漏", "臭鸡蛋", "头晕", "砰", "爆燃", "火焰异常", "煤气味"]
+
+        if any(kw in question for kw in emergency_kw):
+            new_state = "emergency"
+        elif any(kw in question for kw in danger_kw):
+            new_state = "dangerous"
+        elif current_state in ("dangerous", "emergency"):
+            # 高危状态下，用户说"好了/没事了" → resolved
+            resolve_kw = ["好了", "没事了", "恢复了", "已经处理", "解决了", "没了"]
+            if any(kw in question for kw in resolve_kw):
+                new_state = "resolved"
+                return {
+                    "new_state": "resolved",
+                    "state_reason": "用户表示风险已缓解",
+                    "should_confirm_safety": True,
+                    "safety_reminder": "请继续保持通风，暂时不要再次点火。如有异常请立即联系抢修。",
+                }
+
+        return {"new_state": new_state, "state_reason": "", "should_confirm_safety": False, "safety_reminder": ""}

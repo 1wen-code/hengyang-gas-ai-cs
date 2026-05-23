@@ -7,7 +7,7 @@ from config import SECRET_KEY, DEBUG, ENABLE_AI_FALLBACK
 from services.knowledge_service import KnowledgeService
 from services.ai_service import (
     AIService, IntentDetector, IntentUnderstandingService, RiskDetectionService,
-    TicketGenerationService, IntentClassifierService, EmotionDetectionService, FuzzyDetectionService,
+    TicketGenerationService, IntentClassifierService, EmotionDetectionService, FuzzyDetectionService, SessionStateService,
     REJECT_REPLY, GREETING_REPLY, IDENTITY_REPLY, BUSINESS_GUIDE_REPLY,
     REFUND_REPLY, EMOTION_REPLY, EMOTION_LIGHT_REPLY, CRISIS_REPLY, COMPLAINT_REPLY,
 )
@@ -25,6 +25,7 @@ ticket_svc = TicketGenerationService(ai._client) if ai else None
 classifier_svc = IntentClassifierService(ai._client) if ai else None
 emotion_svc = EmotionDetectionService(ai._client) if ai else None
 fuzzy_svc = FuzzyDetectionService(ai._client) if ai else None
+state_svc = SessionStateService(ai._client) if ai else None
 
 TRANSFER_REPLY = (
     "非常抱歉，我暂时无法准确回答您的问题。"
@@ -121,6 +122,16 @@ def chat():
         comp = risk_svc.compare_with_keyword(question, kw)
         if comp["verdict"] == "llm_upgrade":
             risk = {"level": comp["final_level"], "label": comp["final_level_label"], "needs_ticket": comp["final_level"] >= 3, "reason": comp.get("llm_risk",{}).get("risk_reason","") if comp.get("llm_risk") else "", "safety_prefix": ""}
+
+    # === 4.5 会话状态机 ===
+    prev_state = session.get("conversation_state", "normal")
+    state_result = state_svc.evaluate(question, prev_state, risk["label"]) if state_svc else {"new_state": "normal", "should_confirm_safety": False, "safety_reminder": ""}
+    session["conversation_state"] = state_result.get("new_state", "normal")
+
+    # 高危状态恢复检查：如果上一轮是危险状态且用户说没事了，追加安全提醒
+    safety_append = ""
+    if state_result.get("should_confirm_safety") and state_result.get("safety_reminder"):
+        safety_append = state_result["safety_reminder"]
 
     # === 5. 业务状态判断 ===
     biz = {"standard_question": question, "category": classification.get("category",""), "real_intent": question}
@@ -233,6 +244,7 @@ def chat():
                    "standard_question": biz["standard_question"], "category": biz["category"]},
         "emotion": emotion,
         "fuzzy": fuzzy,
+        "session_state": {"current": state_result.get("new_state", "normal"), "previous": prev_state, "should_confirm_safety": state_result.get("should_confirm_safety", False)},
         "risk": {"level": risk["level"], "label": risk["label"], "reason": risk["reason"]},
         "classification": classification,
         "search": {"faq_hit": search["faq"] is not None, "policy_hit": search["policy"] is not None,
