@@ -55,6 +55,17 @@ DANGER_PATTERNS = [
     r"头晕.*煤气", r"头晕.*燃气", r"恶心.*味道",
     r"臭味", r"异味", r"刺鼻", r"难闻.*气味",
     r"臭臭", r"怪味", r"糊味", r"烧焦",
+    r"厨房.*味道", r"厨房.*味", r"有.*怪味",
+    r"热水器.*怪", r"燃气.*漏", r"嘶嘶",
+]
+
+# 非燃气场景 — 包含危险词但不是燃气事故，不触发 danger
+NON_GAS_CONTEXT = [
+    r"手机.*爆炸", r"手机.*炸", r"电脑.*爆炸", r"车.*爆炸",
+    r"电瓶.*爆炸", r"电池.*爆炸", r"耳机.*爆炸",
+    r"手机.*着火", r"电器.*着火",
+    r"漏水", r"水管.*破", r"水龙头",
+    r"非燃气", r"不是燃气", r"不是煤气",
 ]
 
 SAFE_CONTEXT = [
@@ -71,16 +82,24 @@ SAFE_CONTEXT = [
     r"火.*不稳", r"火焰.*不稳", r"忽大忽小",
     r"火.*跳", r"火.*飘", r"一闪一闪",
     r"灶.*坏", r"灶.*修", r"燃气.*修",
-    r"抽风", r"发神经", r"怪怪的",
+    r"抽风", r"发神经",
     r"没气", r"没.*气", r"不来气",
     r"点火.*不行", r"火烧.*不",
+    r"灶.*怪", r"火.*怪",  # 灶具/火焰异常，非泄漏
+    r"打不开", r"用不了", r"不工作",
 ]
 
 
 def detect_danger(msg: str) -> bool:
+    # 非燃气场景 → 直接返回 False
+    for p in NON_GAS_CONTEXT:
+        if re.search(p, msg):
+            return False
+    # 安全语境 → False
     for p in SAFE_CONTEXT:
         if re.search(p, msg):
             return False
+    # 危险词 → True
     for p in DANGER_PATTERNS:
         if re.search(p, msg):
             return True
