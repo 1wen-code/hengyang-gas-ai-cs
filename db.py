@@ -132,9 +132,9 @@ def get_risk_trends(days: int = 7):
     trends = {(today - timedelta(days=i)).strftime("%Y-%m-%d"): {"high": 0, "medium": 0, "total": 0}
               for i in range(days - 1, -1, -1)}
     for r in get_tickets(100000):
-        d = (r.get("created_at", "") or "")[:10]
+        d = (r.get("时间", "") or "")[:10]
         if d in trends:
             trends[d]["total"] += 1
-            if r.get("risk_level", "") in ("高危", "紧急"): trends[d]["high"] += 1
+            if r.get("风险等级", "") in ("高危", "紧急"): trends[d]["high"] += 1
             else: trends[d]["medium"] += 1
     return list(trends.items())
