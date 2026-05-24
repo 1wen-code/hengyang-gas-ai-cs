@@ -10,7 +10,12 @@ from services.emergency import detect_emergency, generate_ticket, log_emergency
 
 def handle(message: str, session: dict, client_ip: str = "") -> dict:
     """
-    返回: {"reply": str, "mode": "danger"|"normal", "ticket": str|None, "risk_level": str|None}
+    返回包含前端预警所需的完整字段：
+      source: "emergency"(高危) | "warning"(疑似)
+      risk: {level, label}
+      risk_code: int
+      risk_level: str
+      ticket: str | None
     """
     # 取消危险 → 退出
     cancel_kw = ["没事了", "处理好了", "解决了", "修好了", "正常了",
@@ -20,8 +25,11 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
         return {
             "reply": "好的，确认安全了。后续如有异常请随时联系。还有其他燃气问题需要帮您吗？",
             "mode": "normal",
+            "source": "guide",
+            "risk": {"level": 1, "label": "普通"},
+            "risk_code": 1,
+            "risk_level": "普通",
             "ticket": None,
-            "risk_level": None,
         }
 
     # 安全指令类问题 → 直接返回固定步骤，不调 AI
@@ -37,21 +45,35 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
                 "确认安全后请告诉我。"
             ),
             "mode": "danger",
+            "source": "emergency",
+            "risk": {"level": 3, "label": "高危"},
+            "risk_code": 3,
+            "risk_level": "高危",
             "ticket": None,
-            "risk_level": None,
         }
 
     # 生成工单
     risk = detect_emergency(message)
     ticket_id = None
-    risk_label = None
-    if risk and risk["level"] >= 2:
-        import uuid
-        uid = str(uuid.uuid4().hex[:12])
-        t = generate_ticket(message, risk["risk_label"], client_ip, uid)
-        log_emergency(message, risk["risk_label"], client_ip, t["工单ID"])
-        ticket_id = t["工单ID"]
+    risk_level_num = 1
+    risk_label = "普通"
+    if risk:
+        risk_level_num = risk["level"]
         risk_label = risk["risk_label"]
+        if risk_level_num >= 2:
+            import uuid
+            uid = str(uuid.uuid4().hex[:12])
+            t = generate_ticket(message, risk_label, client_ip, uid)
+            log_emergency(message, risk_label, client_ip, t["工单ID"])
+            ticket_id = t["工单ID"]
+
+    # 前端 source 映射
+    if risk_level_num >= 3:
+        source = "emergency"
+    elif risk_level_num >= 2:
+        source = "warning"
+    else:
+        source = "danger_handler"
 
     # 调用 AI 生成简短安全回复（不带历史）
     if deepseek:
@@ -64,14 +86,20 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
             return {
                 "reply": reply,
                 "mode": "danger",
-                "ticket": ticket_id,
+                "source": source,
+                "risk": {"level": risk_level_num, "label": risk_label},
+                "risk_code": risk_level_num,
                 "risk_level": risk_label,
+                "ticket": ticket_id,
             }
 
     # 兜底
     return {
         "reply": "请确保安全。如有燃气异味、明火或身体不适，请立即关闭阀门、开窗通风，拨打 0734-8677777。现在情况怎么样？",
         "mode": "danger",
-        "ticket": ticket_id,
+        "source": source,
+        "risk": {"level": risk_level_num, "label": risk_label},
+        "risk_code": risk_level_num,
         "risk_level": risk_label,
+        "ticket": ticket_id,
     }
