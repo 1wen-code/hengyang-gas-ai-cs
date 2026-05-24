@@ -71,8 +71,7 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
             risk_label = "高危"
             risk_level_num = 3
             if risk and risk["level"] >= 2:
-                import uuid
-                uid = str(uuid.uuid4().hex[:12])
+                uid = session.get("user_id", "")
                 t = generate_ticket(message, risk["risk_label"] or risk_label, client_ip, uid)
                 log_emergency(message, risk["risk_label"] or risk_label, client_ip, t["工单ID"])
                 ticket_id = t["工单ID"]
@@ -101,8 +100,7 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
         risk_level_num = risk["level"]
         risk_label = risk["risk_label"]
         if risk_level_num >= 2:
-            import uuid
-            uid = str(uuid.uuid4().hex[:12])
+            uid = session.get("user_id", "")
             t = generate_ticket(message, risk_label, client_ip, uid)
             log_emergency(message, risk_label, client_ip, t["工单ID"])
             ticket_id = t["工单ID"]

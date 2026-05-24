@@ -37,6 +37,9 @@ def chat():
     if not sid:
         sid = uuid.uuid4().hex[:12]
         session["user_id"] = sid
+    # 同步到 session_manager，供 danger_handler 写工单用
+    from session_manager import sessions
+    sessions.get(sid)["user_id"] = sid
 
     result = route(question, sid, client_ip, client_history)
 
