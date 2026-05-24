@@ -10,6 +10,11 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_MODEL = "deepseek-chat"
 ENABLE_AI_FALLBACK = bool(DEEPSEEK_API_KEY)  # 无Key时自动禁用AI
 
+# ── Supabase 持久化存储 ──────────────────────────
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+ENABLE_SUPABASE = bool(SUPABASE_URL and SUPABASE_KEY)
+
 # ── 知识库路径 ──────────────────────────────────
 KB_FAQ_PATH = os.path.join(BASE_DIR, "knowledge", "faq", "faq_knowledge.csv")
 KB_POLICY_PATH = os.path.join(BASE_DIR, "knowledge", "policy", "policy_knowledge.csv")

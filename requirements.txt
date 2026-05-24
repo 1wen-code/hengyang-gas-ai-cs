@@ -5,3 +5,4 @@ jieba>=0.42
 openai>=1.0
 python-dotenv>=1.0
 gunicorn>=22.0
+supabase>=2.0
