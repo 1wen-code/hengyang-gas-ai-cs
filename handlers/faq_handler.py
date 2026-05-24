@@ -47,12 +47,19 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
         faq = kb.search_faq(msg)
 
     if faq and faq.get("score", 0) >= MATCH_THRESHOLD:
+        # 场景过滤：匹配问题和用户问题场景不一致时，降级 normal
+        faq_q = faq.get("question", "")
+        faq_extra = ["国外", "海外", "委托", "代办", "商用", "工业", "饭店", "商铺"]
+        has_extra = any(kw in faq_q and kw not in msg for kw in faq_extra)
+        if has_extra:
+            return {"reply": None, "mode": "normal", "source": "faq_handler"}
+
         new_category = faq.get("category", "")
         return {
             "reply": faq["answer"],
             "mode": "faq",
             "source": "faq_handler",
-            "matched": faq.get("question", ""),
+            "matched": faq_q,
             "category": new_category,
             "topic_tag": topic_tag or new_category,
         }
