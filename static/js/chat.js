@@ -79,9 +79,13 @@
         html += '<button class="risk-close" onclick="this.parentElement.remove()">✕</button>';
         banner.innerHTML = html;
 
-        const header = document.querySelector(".chat-header");
-        if (header) {
-            header.parentNode.insertBefore(banner, header.nextSibling);
+        const main = document.querySelector(".chat-main");
+        const chatMessages = document.getElementById("chatMessages");
+        if (main && chatMessages) {
+            main.insertBefore(banner, chatMessages);
+        } else {
+            const header = document.querySelector(".chat-header");
+            if (header) header.parentNode.insertBefore(banner, header.nextSibling);
         }
     }
 
