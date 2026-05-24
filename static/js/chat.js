@@ -168,6 +168,10 @@
                         const riskCode = riskLevel || data.risk_code || 2;
                         const ticketId = data.ticket || data.ticket_id || null;
                         showEmergencyBanner(riskLabel, riskCode, ticketId);
+                    } else {
+                        // 非风险消息：隐藏旧 banner
+                        const oldBanner = document.getElementById("emergencyBanner");
+                        if (oldBanner) oldBanner.remove();
                     }
 
                     // 构建消息 class
