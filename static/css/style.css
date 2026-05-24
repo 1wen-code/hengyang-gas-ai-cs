@@ -1066,6 +1066,22 @@ body {
 
     .mobile-hide { display: none !important; }
 
+    /* ====== 风险预警横幅 — 手机端适配 ====== */
+    .risk-banner {
+        padding: 8px 10px;
+        font-size: 11px;
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+    .risk-banner .risk-icon { font-size: 15px; }
+    .risk-banner .risk-close { font-size: 14px; padding: 0 4px; }
+    .risk-banner strong { font-size: 11px; }
+
+    /* ====== 聊天气泡 — 手机端外间距 ====== */
+    .message { padding: 6px 10px; }
+    .message-content { font-size: var(--font-sm); }
+    .message .message-avatar { width: 28px; height: 28px; font-size: 11px; }
+
     .toggle-sidebar-btn {
         min-width: 44px;
         min-height: 44px;
