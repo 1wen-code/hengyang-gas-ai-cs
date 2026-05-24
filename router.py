@@ -1,139 +1,104 @@
 """
-Router — 轻量路由，严格顺序分发
+Router — 核心路由
 
-所有消息：前端 → Flask → Router → Handler → 回复
-Router 决定 mode，AI 不允许决定 mode
+严格顺序：
+  1. smalltalk      — 最高优先，可退出 danger
+  2. danger(mode)   — 已在危险中，优先处理
+  3. detect_danger  — 新危险检测
+  4. human          — 转人工
+  5. faq            — 知识库匹配
+  6. normal         — 通用 AI
 """
-from session_manager import session_manager
+from session_manager import sessions
 from detectors import (
-    detect_smalltalk,
-    detect_human,
-    detect_danger,
-    detect_faq,
-    detect_normal,
+    detect_smalltalk, detect_danger, detect_cancel_danger,
+    detect_human, detect_faq,
 )
-from handlers import (
-    handle_smalltalk,
-    handle_human,
-    handle_danger,
-    handle_faq,
-    handle_normal,
-)
-from services.knowledge_service import KnowledgeService
-from services.emergency import detect_emergency, generate_ticket, log_emergency
-
-_kb = None
+from handlers.danger_handler import handle as handle_danger
+from handlers.smalltalk_handler import handle as handle_smalltalk
+from handlers.human_handler import handle as handle_human
+from handlers.faq_handler import handle as handle_faq
+from handlers.normal_handler import handle as handle_normal
 
 
-def _kb():
-    global _kb
-    if _kb is None:
-        _kb = KnowledgeService()
-    return _kb
+def route(message: str, session_id: str, client_ip: str = "",
+          client_history: list = None) -> dict:
+    """所有消息的唯一入口"""
 
+    session = sessions.get(session_id)
 
-def route_message(message, session_id, client_ip="", client_history=None):
-    """
-    路由顺序（严格）：
-      1. smalltalk — 最高优先级（骗你的/开玩笑/哈哈 → 退出 danger）
-      2. human     — 转人工
-      3. danger    — 真实危险
-      4. faq       — 业务关键词 → 知识库检索
-      5. normal    — 通用 AI 回答
-    """
-    session = session_manager.get(session_id)
-    mode = session["mode"]
-    msg = message.strip()
-    history = client_history or []
-    result = None
-
-    # 新对话 → 重置
+    # 新对话 → 重置状态
     if not client_history:
-        session_manager.reset(session_id)
-        mode = "normal"
+        sessions.reset(session_id)
+        session = sessions.get(session_id)
 
-    # ── 0. 非燃气相关 → smalltalk ──
-    if not detect_normal(msg):
-        result = handle_smalltalk(msg, session, history)
-        session_manager.set_mode(session_id, "smalltalk")
+    # ═════════════════════════════════════════
+    # 1. SMALLTALK — 最高优先
+    # ═════════════════════════════════════════
+    if detect_smalltalk(message):
+        sessions.set_mode(session_id, "smalltalk")
+        result = handle_smalltalk(message, session)
+        _save_history(session_id, message, result["reply"])
         return result
 
     # ═════════════════════════════════════════
-    # 1. SMALLTALK — 最高优先级
-    #    "骗你的""开玩笑" 必须退出 danger
+    # 2. 已在 DANGER 模式
     # ═════════════════════════════════════════
-    if detect_smalltalk(msg):
-        if mode == "danger":
-            session_manager.cancel_danger(session_id)
-        result = handle_smalltalk(msg, session, history)
-        session_manager.set_mode(session_id, "smalltalk")
-        return result
+    if session["mode"] == "danger":
+        if detect_cancel_danger(message):
+            sessions.set_mode(session_id, "normal")
+            reply = "好的，确认安全了。还有其他燃气问题需要帮您吗？"
+            _save_history(session_id, message, reply)
+            return {"reply": reply, "mode": "normal"}
 
-    # ── 当前在 danger 模式 → 继续 danger handler ──
-    if mode == "danger":
-        result = handle_danger(msg, session, history)
+        result = handle_danger(message, session, client_ip)
         new_mode = result.get("mode", "danger")
+        sessions.set_mode(session_id, new_mode)
         if new_mode == "normal":
-            session_manager.cancel_danger(session_id)
-        else:
-            session_manager.set_mode(session_id, "danger")
+            sessions.reset(session_id)
+        _save_history(session_id, message, result["reply"])
         return result
 
     # ═════════════════════════════════════════
-    # 2. HUMAN
+    # 3. 新 DANGER 检测
     # ═════════════════════════════════════════
-    if detect_human(msg):
-        result = handle_human(msg, session, history)
-        session_manager.set_mode(session_id, "human")
-        return result
-
-    if mode == "human":
-        result = handle_human(msg, session, history)
-        return result
-
-    # ═════════════════════════════════════════
-    # 3. DANGER
-    # ═════════════════════════════════════════
-    if detect_danger(msg):
-        session_manager.confirm_danger(session_id)
-        result = handle_danger(msg, session, history)
-        new_mode = result.get("mode", "danger")
-        if new_mode == "normal":
-            session_manager.cancel_danger(session_id)
-        else:
-            session_manager.set_mode(session_id, "danger")
-
-        # 高风险 → 工单
-        risk = detect_emergency(msg)
-        if risk and risk["level"] >= 2:
-            import uuid
-            uid = session.get("user_id", "")
-            if not uid:
-                uid = uuid.uuid4().hex[:12]
-                session["user_id"] = uid
-            ticket = generate_ticket(msg, risk["risk_label"], client_ip, uid)
-            log_emergency(msg, risk["risk_label"], client_ip, ticket["工单ID"])
-            prefix = risk.get("reply", "")
-            if prefix and result.get("reply"):
-                result["reply"] = prefix + "\n\n" + result["reply"]
-            result["ticket"] = ticket["工单ID"]
-            result["risk_level"] = risk["risk_label"]
-            result["risk_code"] = risk["level"]
+    if detect_danger(message):
+        sessions.set_mode(session_id, "danger")
+        result = handle_danger(message, session, client_ip)
+        sessions.set_mode(session_id, result.get("mode", "danger"))
+        _save_history(session_id, message, result["reply"])
         return result
 
     # ═════════════════════════════════════════
-    # 4. FAQ
+    # 4. HUMAN
     # ═════════════════════════════════════════
-    if detect_faq(msg):
-        result = handle_faq(msg, session, history)
+    if detect_human(message):
+        sessions.set_mode(session_id, "human")
+        result = handle_human(message, session)
+        _save_history(session_id, message, result["reply"])
+        return result
+
+    # ═════════════════════════════════════════
+    # 5. FAQ
+    # ═════════════════════════════════════════
+    if detect_faq(message):
+        result = handle_faq(message, session)
         if result.get("reply") is not None:
-            session_manager.set_mode(session_id, "faq")
-            session_manager.set_topic(session_id, result.get("category", ""))
+            sessions.set_mode(session_id, "faq")
+            sessions.set_topic(session_id, result.get("category", ""))
+            _save_history(session_id, message, result["reply"])
             return result
-        # FAQ handler 未命中 → 降级 normal
+        # FAQ 未命中 → 降级 normal
 
     # ═════════════════════════════════════════
-    # 5. NORMAL — 兜底
+    # 6. NORMAL — 兜底
     # ═════════════════════════════════════════
-    session_manager.set_mode(session_id, "normal")
-    return handle_normal(msg, session, history)
+    sessions.set_mode(session_id, "normal")
+    result = handle_normal(message, session)
+    _save_history(session_id, message, result["reply"])
+    return result
+
+
+def _save_history(sid: str, user_msg: str, bot_msg: str):
+    sessions.add_history(sid, "user", user_msg)
+    sessions.add_history(sid, "assistant", bot_msg)

@@ -1,84 +1,56 @@
 """
-Session 状态管理 — 纯规则状态机，AI 不能决定 mode
+Session 状态管理 — 轻量状态机
 """
 import time
-from typing import Optional
 
-VALID_MODES = ("normal", "danger", "faq", "human", "smalltalk")
+MODES = ("normal", "danger", "human", "faq", "smalltalk")
+MAX_HISTORY = 8
 
 
 class SessionManager:
-    """管理每个用户会话的状态"""
 
     def __init__(self):
-        self._sessions: dict[str, dict] = {}
+        self._s = {}
 
-    def get(self, session_id: str) -> dict:
-        """获取或创建 session"""
-        if session_id not in self._sessions:
-            self._sessions[session_id] = self._create()
-        s = self._sessions[session_id]
-        s["last_active"] = time.time()
-        return s
+    def get(self, sid: str) -> dict:
+        if sid not in self._s:
+            self._s[sid] = self._new()
+        self._s[sid]["last_active"] = time.time()
+        return self._s[sid]
 
-    def set_mode(self, session_id: str, mode: str):
-        if mode not in VALID_MODES:
-            raise ValueError(f"Invalid mode: {mode}, must be one of {VALID_MODES}")
-        s = self.get(session_id)
-        s["mode"] = mode
-        s["last_active"] = time.time()
+    def reset(self, sid: str):
+        self._s[sid] = self._new()
 
-    def get_mode(self, session_id: str) -> str:
-        return self.get(session_id)["mode"]
+    def set_mode(self, sid: str, mode: str):
+        if mode not in MODES:
+            return
+        self.get(sid)["mode"] = mode
 
-    def reset(self, session_id: str):
-        """新对话时重置 session"""
-        self._sessions[session_id] = self._create()
+    def get_mode(self, sid: str) -> str:
+        return self.get(sid)["mode"]
 
-    def confirm_danger(self, session_id: str):
-        s = self.get(session_id)
-        s["danger_confirmed"] = True
-        s["mode"] = "danger"
+    def add_history(self, sid: str, role: str, content: str):
+        s = self.get(sid)
+        s["history"].append({"role": role, "content": content})
+        if len(s["history"]) > MAX_HISTORY * 2:
+            s["history"] = s["history"][-MAX_HISTORY * 2:]
 
-    def cancel_danger(self, session_id: str):
-        """退出 danger 模式"""
-        s = self.get(session_id)
-        s["mode"] = "normal"
-        s["danger_confirmed"] = False
-        s["last_topic"] = ""
+    def get_history(self, sid: str) -> list:
+        return self.get(sid)["history"]
 
-    def set_topic(self, session_id: str, topic: str):
-        self.get(session_id)["last_topic"] = topic
+    def set_topic(self, sid: str, topic: str):
+        self.get(sid)["last_topic"] = topic
 
-    def get_topic(self, session_id: str) -> str:
-        return self.get(session_id).get("last_topic", "")
+    def get_topic(self, sid: str) -> str | None:
+        return self.get(sid)["last_topic"]
 
-    def set_last_faq_answer(self, session_id: str, answer: str):
-        self.get(session_id)["last_faq_answer"] = answer
-
-    def get_last_faq_answer(self, session_id: str) -> str:
-        return self.get(session_id).get("last_faq_answer", "")
-
-    def cleanup(self, max_age_seconds: int = 3600):
-        """清理过期 session"""
-        now = time.time()
-        expired = [
-            sid for sid, s in self._sessions.items()
-            if now - s.get("last_active", 0) > max_age_seconds
-        ]
-        for sid in expired:
-            del self._sessions[sid]
-
-    @staticmethod
-    def _create() -> dict:
+    def _new(self) -> dict:
         return {
             "mode": "normal",
-            "danger_confirmed": False,
-            "last_topic": "",
-            "last_faq_answer": "",
+            "history": [],
+            "last_topic": None,
             "last_active": time.time(),
         }
 
 
-# 全局单例
-session_manager = SessionManager()
+sessions = SessionManager()

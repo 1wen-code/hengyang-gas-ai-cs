@@ -1,75 +1,77 @@
 """
-Danger Handler — 危险模式独立处理
-
-禁止：闲聊、RAG、条例宣传、长篇分析、AI自由发挥
-只允许：安全动作、简短确认、是否转人工
+Danger Handler — 独立危险模式
+禁止：闲聊、RAG、条例、长篇、AI自由发挥
+只允许：安全指令、简短确认、工单、转人工
 """
 from deepseek_client import deepseek
-
-DANGER_PROMPT = """你是燃气安全助手。
-
-用户可能存在危险。
-
-目标：优先确认安全状态。
-
-禁止：闲聊、长篇解释、法规宣传、自由扩展。
-
-回答必须：短、直接、安全优先。
-
-如果用户说"没事了""处理好了""骗你的""开玩笑"：
-接受并回复安抚语，不继续报警。"""
+from prompts import DANGER_PROMPT
+from services.emergency import detect_emergency, generate_ticket, log_emergency
 
 
-def handle_danger(message: str, session: dict, history: list = None) -> dict:
+def handle(message: str, session: dict, client_ip: str = "") -> dict:
     """
-    处理危险模式下的用户消息。
-
-    返回: {"reply": str, "mode": "danger", "source": "danger_handler"}
+    返回: {"reply": str, "mode": "danger"|"normal", "ticket": str|None, "risk_level": str|None}
     """
-    msg = message.strip()
-
-    # 快速规则：用户确认安全
+    # 取消危险 → 退出
     cancel_kw = ["没事了", "处理好了", "解决了", "修好了", "正常了",
                  "骗你的", "开玩笑", "逗你", "测试的", "假的",
-                 "没味了", "关好了", "通风了", "已处理", "搞定了",
-                 "好了", "没事", "不响了", "没闻到", "不臭了"]
-    if any(kw in msg for kw in cancel_kw):
+                 "没味了", "关好了", "通风了", "已处理", "搞定了"]
+    if any(kw in message for kw in cancel_kw):
         return {
-            "reply": "好的，确认安全就好。如果后续再闻到异味或有异常，随时联系我们。还有其他燃气问题需要帮您吗？",
+            "reply": "好的，确认安全了。后续如有异常请随时联系。还有其他燃气问题需要帮您吗？",
             "mode": "normal",
-            "source": "danger_handler",
+            "ticket": None,
+            "risk_level": None,
         }
 
-    # 快速规则：安全指令类，直接返回固定回答
-    if any(kw in msg for kw in ["怎么做", "怎么办", "怎么处理", "然后", "然后呢"]):
+    # 安全指令类问题 → 直接返回固定步骤，不调 AI
+    if any(kw in message for kw in ["怎么做", "怎么办", "怎么处理", "然后呢", "然后"]):
         return {
             "reply": (
-                "请按以下步骤处理：\n"
-                "1. 立即关闭燃气总阀门\n"
+                "请立即按以下步骤处理：\n"
+                "1. 关闭燃气总阀门\n"
                 "2. 打开门窗通风\n"
-                "3. 不要开关任何电器\n"
-                "4. 不要使用明火\n"
-                "5. 远离泄漏区域\n\n"
-                "确认安全后请告诉我。如需紧急帮助，请拨打 0734-8677777。"
+                "3. 不要开关电器、不使用明火\n"
+                "4. 远离泄漏区域\n"
+                "5. 拨打抢修电话 0734-8677777\n\n"
+                "确认安全后请告诉我。"
             ),
             "mode": "danger",
-            "source": "danger_handler",
+            "ticket": None,
+            "risk_level": None,
         }
 
-    # 调用 DeepSeek 生成简短安全回复
+    # 生成工单
+    risk = detect_emergency(message)
+    ticket_id = None
+    risk_label = None
+    if risk and risk["level"] >= 2:
+        import uuid
+        uid = str(uuid.uuid4().hex[:12])
+        t = generate_ticket(message, risk["risk_label"], client_ip, uid)
+        log_emergency(message, risk["risk_label"], client_ip, t["工单ID"])
+        ticket_id = t["工单ID"]
+        risk_label = risk["risk_label"]
+
+    # 调用 AI 生成简短安全回复（不带历史）
     if deepseek:
-        reply = deepseek.chat(
-            system_prompt=DANGER_PROMPT,
-            user_message=f"用户消息：{msg}",
-            temperature=0.1,
-            max_tokens=150,  # 极短回复
-        )
+        user_msg = f"用户说：{message}\n\n请简短回复，确认安全状态。"
+        reply = deepseek.chat(DANGER_PROMPT, user_msg, history=None,
+                              temperature=0.1, max_tokens=150)
         if reply:
-            return {"reply": reply, "mode": "danger", "source": "danger_handler"}
+            if ticket_id:
+                reply = f"[工单 {ticket_id}] {reply}"
+            return {
+                "reply": reply,
+                "mode": "danger",
+                "ticket": ticket_id,
+                "risk_level": risk_label,
+            }
 
     # 兜底
     return {
-        "reply": "请确保安全。如有燃气异味、明火或身体不适，请立即关闭阀门、开窗通风，并拨打 0734-8677777。现在情况怎么样了？",
+        "reply": "请确保安全。如有燃气异味、明火或身体不适，请立即关闭阀门、开窗通风，拨打 0734-8677777。现在情况怎么样？",
         "mode": "danger",
-        "source": "danger_handler",
+        "ticket": ticket_id,
+        "risk_level": risk_label,
     }
