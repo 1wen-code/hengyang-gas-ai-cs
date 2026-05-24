@@ -56,8 +56,7 @@ def _delete(table: str, where: str):
 def add_ticket(ticket_id: str, question: str, risk_level: str, ip: str = "", user_id: str = ""):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     _post("tickets", {"id": ticket_id, "created_at": now, "user_question": question,
-        "risk_level": risk_level, "category": "紧急事件", "status": "处理中",
-        "handler": "调度中心A组", "user_ip": ip, "user_id": user_id})
+        "risk_level": risk_level, "user_ip": ip, "user_id": user_id})
     return {"工单ID": ticket_id, "时间": now, "用户问题": question,
             "风险等级": risk_level, "分类": "紧急事件", "状态": "处理中",
             "处理人": "调度中心A组", "用户IP": ip, "用户标识": user_id}
