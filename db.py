@@ -16,8 +16,8 @@ def _post(table: str, data: dict):
             data=json.dumps(data).encode(), headers=H, method="POST")
         req.add_header("Prefer", "return=representation")
         urllib.request.urlopen(req, timeout=10)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[DB] {table} error: {e}")
 
 
 def _get(table: str, select: str = "*", where: str = "", order: str = "", limit: int = 50) -> list[dict]:
@@ -39,16 +39,16 @@ def _patch(table: str, where: str, data: dict):
             data=json.dumps(data).encode(), headers=H, method="PATCH")
         req.add_header("Prefer", "return=minimal")
         urllib.request.urlopen(req, timeout=10)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[DB] {table} error: {e}")
 
 
 def _delete(table: str, where: str):
     try:
         req = urllib.request.Request(f"{URL}/rest/v1/{table}?{where}", headers=H, method="DELETE")
         urllib.request.urlopen(req, timeout=10)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[DB] {table} error: {e}")
 
 
 # ═══ 工单 ═══

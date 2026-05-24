@@ -47,7 +47,7 @@ def chat():
 
     result = route(question, sid, client_ip, client_history)
 
-    # 写入 SQLite
+    # 写入 Supabase
     try:
         add_chat(question, result.get("reply", ""), result.get("mode", ""))
     except:

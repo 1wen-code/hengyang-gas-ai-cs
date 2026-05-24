@@ -10,7 +10,7 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
         reply = deepseek.chat(HUMAN_PROMPT, f"用户说：{message}",
                               history=None, temperature=0.3, max_tokens=120)
         if reply:
-            return {"reply": reply, "mode": "human"}
+            return {"reply": reply, "mode": "human", "source": "human_handler"}
 
     return {
         "reply": (
@@ -19,4 +19,5 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
             "**0734-8677777**"
         ),
         "mode": "human",
+        "source": "human_handler",
     }

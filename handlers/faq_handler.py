@@ -72,6 +72,7 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
             return {
                 "reply": reply,
                 "mode": "faq",
+                "source": "faq_handler",
                 "matched": faq.get("question", "") if faq else "",
                 "category": new_category,
                 "topic_tag": topic_tag,
@@ -81,6 +82,7 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
         return {
             "reply": faq["answer"],
             "mode": "faq",
+            "source": "faq_handler",
             "matched": faq.get("question", ""),
             "category": faq.get("category", ""),
         }
@@ -88,4 +90,5 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
     return {
         "reply": None,
         "mode": "normal",
+        "source": "faq_handler",
     }
