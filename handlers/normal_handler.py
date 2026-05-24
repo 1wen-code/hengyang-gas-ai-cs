@@ -9,6 +9,16 @@ from config import MATCH_THRESHOLD
 _kb = None
 
 
+def _scene_mismatch(user_msg: str, faq_question: str) -> bool:
+    import jieba
+    u_words = set(jieba.lcut(user_msg))
+    f_words = set(jieba.lcut(faq_question))
+    extra = f_words - u_words
+    if not f_words:
+        return False
+    return len(extra) / len(f_words) > 0.4
+
+
 def _get_kb():
     global _kb
     if _kb is None:
@@ -25,8 +35,9 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
 
     context = "无参考资料"
     if faq and faq.get("score", 0) >= MATCH_THRESHOLD:
-        context = f"Q: {faq['question']}\nA: {faq['answer']}"
-    elif top_k:
+        if not _scene_mismatch(message, faq.get("question", "")):
+            context = f"Q: {faq['question']}\nA: {faq['answer']}"
+    if context == "无参考资料" and top_k:
         parts = []
         for i, item in enumerate(top_k, 1):
             parts.append(f"Q: {item['question']}\nA: {item['answer']}")

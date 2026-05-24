@@ -17,6 +17,18 @@ TOPIC_EXTRACT = {
 }
 
 
+def _scene_mismatch(user_msg: str, faq_question: str) -> bool:
+    """FAQ问题中多余的词太多 → 场景不匹配"""
+    import jieba
+    u_words = set(jieba.lcut(user_msg))
+    f_words = set(jieba.lcut(faq_question))
+    extra = f_words - u_words  # FAQ有但用户没说的词
+    if not f_words:
+        return False
+    ratio = len(extra) / len(f_words)
+    return ratio > 0.4  # >40%的词用户没提 → 不是同一个问题
+
+
 def _get_kb():
     global _kb
     if _kb is None:
@@ -47,11 +59,9 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
         faq = kb.search_faq(msg)
 
     if faq and faq.get("score", 0) >= MATCH_THRESHOLD:
-        # 场景过滤：匹配问题和用户问题场景不一致时，降级 normal
+        # 通用场景过滤：FAQ问题中多余的词太多 → 匹配不精确，降级 normal
         faq_q = faq.get("question", "")
-        faq_extra = ["国外", "海外", "委托", "代办", "商用", "工业", "饭店", "商铺"]
-        has_extra = any(kw in faq_q and kw not in msg for kw in faq_extra)
-        if has_extra:
+        if _scene_mismatch(msg, faq_q):
             return {"reply": None, "mode": "normal", "source": "faq_handler"}
 
         new_category = faq.get("category", "")
