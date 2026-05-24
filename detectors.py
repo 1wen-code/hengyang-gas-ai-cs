@@ -41,7 +41,7 @@ def detect_smalltalk(msg: str) -> bool:
     # 极短输入：先排除可能含业务/危险词的
     if len(m) <= 2:
         # 如果包含危险/业务/人工关键词，不放行到 smalltalk
-        biz_hint = ["漏", "气", "火", "灶", "费", "修", "表", "户", "爆"]
+        biz_hint = ["漏", "气", "火", "灶", "费", "修", "表", "户", "爆", "毒", "炸", "烟"]
         if any(kw in m for kw in biz_hint):
             return False
         return True
@@ -52,7 +52,7 @@ def detect_smalltalk(msg: str) -> bool:
             return True
 
     if len(m) <= 3:
-        biz_hint = ["漏气", "燃气", "开户", "缴费", "维修", "热水", "爆炸"]
+        biz_hint = ["漏气", "泄漏", "燃气", "煤气", "开户", "缴费", "维修", "热水", "爆炸", "着火", "中毒", "漏了", "味了"]
         if any(kw in m for kw in biz_hint):
             return False
         return True
