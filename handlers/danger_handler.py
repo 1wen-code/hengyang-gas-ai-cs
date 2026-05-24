@@ -75,6 +75,18 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
     else:
         source = "danger_handler"
 
+    # risk=1 不应该用危险语气，降级到 normal 模式
+    if risk_level_num < 2:
+        return {
+            "reply": None,  # 信号：router 降级到 normal
+            "mode": "normal",
+            "source": "guide",
+            "risk": {"level": 1, "label": "普通"},
+            "risk_code": 1,
+            "risk_level": "普通",
+            "ticket": None,
+        }
+
     # 调用 AI 生成简短安全回复（不带历史）
     if deepseek:
         user_msg = f"用户说：{message}\n\n请简短回复，确认安全状态。"

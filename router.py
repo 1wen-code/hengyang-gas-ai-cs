@@ -52,22 +52,25 @@ def route(message: str, session_id: str, client_ip: str = "",
             return {"reply": reply, "mode": "normal"}
 
         result = handle_danger(message, session, client_ip)
-        new_mode = result.get("mode", "danger")
-        sessions.set_mode(session_id, new_mode)
-        if new_mode == "normal":
-            sessions.reset(session_id)
-        _save_history(session_id, message, result["reply"])
-        return result
+        if result.get("reply") is not None:
+            new_mode = result.get("mode", "danger")
+            sessions.set_mode(session_id, new_mode)
+            if new_mode == "normal":
+                sessions.reset(session_id)
+            _save_history(session_id, message, result["reply"])
+            return result
+        # reply=None → 降级，继续往下走
 
     # ═════════════════════════════════════════
     # 3. 新 DANGER 检测
     # ═════════════════════════════════════════
     if detect_danger(message):
-        sessions.set_mode(session_id, "danger")
         result = handle_danger(message, session, client_ip)
-        sessions.set_mode(session_id, result.get("mode", "danger"))
-        _save_history(session_id, message, result["reply"])
-        return result
+        # handler 可能返回 reply=None 表示 risk=1 应降级 normal
+        if result.get("reply") is not None:
+            sessions.set_mode(session_id, result.get("mode", "danger"))
+            _save_history(session_id, message, result["reply"])
+            return result
 
     # ═════════════════════════════════════════
     # 4. HUMAN
