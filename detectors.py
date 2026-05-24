@@ -33,14 +33,30 @@ SMALLTALK_WORDS = [
 
 def detect_smalltalk(msg: str) -> bool:
     m = msg.strip()
+    # 取消危险词
     for kw in CANCEL_DANGER:
         if kw in m:
             return True
-    for kw in SMALLTALK_WORDS:
-        if kw in m.lower():
-            return True
+
+    # 极短输入：先排除可能含业务/危险词的
     if len(m) <= 2:
+        # 如果包含危险/业务/人工关键词，不放行到 smalltalk
+        biz_hint = ["漏", "气", "火", "灶", "费", "修", "表", "户", "爆"]
+        if any(kw in m for kw in biz_hint):
+            return False
         return True
+
+    # 闲聊/问候词
+    for kw in SMALLTALK_WORDS:
+        if re.search(kw, m):
+            return True
+
+    if len(m) <= 3:
+        biz_hint = ["漏气", "燃气", "开户", "缴费", "维修", "热水", "爆炸"]
+        if any(kw in m for kw in biz_hint):
+            return False
+        return True
+
     return False
 
 
