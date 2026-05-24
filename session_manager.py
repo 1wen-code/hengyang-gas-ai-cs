@@ -56,12 +56,37 @@ class SessionManager:
     def get_topic(self, sid: str) -> str | None:
         return self.get(sid)["last_topic"]
 
+    def enter_recovery(self, sid: str):
+        """进入风险恢复确认状态"""
+        self.get(sid)["recovering"] = True
+
+    def exit_recovery(self, sid: str):
+        """退出风险恢复状态"""
+        s = self.get(sid)
+        s["recovering"] = False
+
+    def is_recovering(self, sid: str) -> bool:
+        return self.get(sid).get("recovering", False)
+
+    def confirm_leave_danger(self, sid: str):
+        """用户确认安全，正式退出危险"""
+        s = self.get(sid)
+        s["mode"] = "normal"
+        s["recovering"] = False
+
+    def cancel_danger(self, sid: str):
+        """取消危险模式"""
+        s = self.get(sid)
+        s["mode"] = "normal"
+        s["recovering"] = False
+
     def _new(self) -> dict:
         return {
             "mode": "normal",
             "history": [],
             "last_topic": None,
             "last_active": time.time(),
+            "recovering": False,
         }
 
 

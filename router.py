@@ -9,6 +9,20 @@ Router — 核心路由
   5. faq            — 知识库匹配
   6. normal         — 通用 AI
 """
+
+# 风险状态恢复确认提示
+RECOVERY_PROMPT = (
+    "系统检测到您此前提到了可能存在风险的信息。\n\n"
+    "请确认目前是否仍存在以下情况：\n"
+    "· 燃气泄漏\n"
+    "· 明火或火灾\n"
+    "· 人员受伤\n"
+    "· 其他紧急状况\n\n"
+    "请回复：\n"
+    "「已解决」— 危险已排除，恢复正常\n"
+    "「仍需帮助」— 情况仍未解决，继续求助"
+)
+
 from session_manager import sessions
 from detectors import (
     detect_smalltalk, detect_danger, detect_cancel_danger,
@@ -45,18 +59,49 @@ def route(message: str, session_id: str, client_ip: str = "",
     # 2. 已在 DANGER 模式
     # ═════════════════════════════════════════
     if session["mode"] == "danger":
-        if detect_cancel_danger(message):
-            sessions.set_mode(session_id, "normal")
-            reply = "好的，确认安全了。还有其他燃气问题需要帮您吗？"
+
+        # ── 恢复确认子状态 ──
+        if sessions.is_recovering(session_id):
+            # 用户确认安全 → 正式退出 danger
+            confirm_kw = ["已解决", "解决了", "处理了", "没事了", "修好了",
+                         "好了", "正常了", "安全了", "已处理", "搞定了",
+                         "没有危险", "不危险", "没问题", "确认安全", "是安全的"]
+            if any(kw in message for kw in confirm_kw):
+                sessions.confirm_leave_danger(session_id)
+                reply = "好的，已解除风险状态。如有其他燃气问题，可随时咨询。"
+                _save_history(session_id, message, reply)
+                return {"reply": reply, "mode": "normal", "source": "guide",
+                        "risk": {"level": 1, "label": "普通"}, "risk_code": 1, "risk_level": "普通"}
+
+            # 用户表示仍需帮助 → 回到 danger
+            need_help = ["仍需帮助", "还要帮助", "没解决", "还有", "还在",
+                        "仍然", "依然", "依旧", "继续", "需要帮助"]
+            if any(kw in message for kw in need_help):
+                sessions.exit_recovery(session_id)
+                result = handle_danger(message, session, client_ip)
+                if result.get("reply") is not None:
+                    _save_history(session_id, message, result["reply"])
+                    return result
+
+            # 其他回复 → 再次提醒确认
+            reply = RECOVERY_PROMPT
             _save_history(session_id, message, reply)
-            return {"reply": reply, "mode": "normal", "source": "guide",
-                    "risk": {"level": 1, "label": "普通"}, "risk_code": 1, "risk_level": "普通"}
+            return {"reply": reply, "mode": "danger", "source": "warning",
+                    "risk": {"level": 2, "label": "恢复确认中"}}
 
-        # 明显是业务问题 → 自动退出 danger，正常处理
+        # ── 取消危险词 → 进入恢复确认状态 ──
+        if detect_cancel_danger(message):
+            sessions.enter_recovery(session_id)
+            reply = RECOVERY_PROMPT
+            _save_history(session_id, message, reply)
+            return {"reply": reply, "mode": "danger", "source": "warning",
+                    "risk": {"level": 2, "label": "恢复确认中"}}
+
+        # ── 明显是业务问题 → 自动退出 danger，正常处理 ──
         if detect_faq(message) and not detect_danger(message):
-            sessions.set_mode(session_id, "normal")
-            # 继续往下走到 FAQ 分支
+            sessions.cancel_danger(session_id)
 
+        # ── 继续危险处理 ──
         else:
             result = handle_danger(message, session, client_ip)
             if result.get("reply") is not None:
