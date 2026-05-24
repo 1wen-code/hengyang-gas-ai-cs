@@ -95,17 +95,24 @@ SAFE_CONTEXT = [
     r"材料", r"证件", r"多少钱", r"收费标准",
     r"流程", r"步骤", r"怎么弄",
     r"火盖.*堵", r"火孔.*堵",
-    r"怎么.*修", r"排查", r"什么原因",
+    r"怎么.*修", r"燃气.*修",
     # 方言/模糊故障描述 — 不能判为危险
     r"火.*没劲", r"没劲", r"时好时坏",
     r"火.*不稳", r"火焰.*不稳", r"忽大忽小",
     r"火.*跳", r"火.*飘", r"一闪一闪",
-    r"灶.*坏", r"灶.*修", r"燃气.*修",
+    r"灶.*坏", r"灶.*修",
     r"抽风", r"发神经",
-    r"没气", r"没.*气", r"不来气",
+    r"不来气",
     r"点火.*不行", r"火烧.*不",
     r"灶.*怪", r"火.*怪",  # 灶具/火焰异常，非泄漏
     r"打不开", r"用不了", r"不工作",
+]
+
+# 强危险词：即使触发了 SAFE_CONTEXT，这些词存在时仍应判定为危险
+STRONG_DANGER = [
+    r"漏气", r"泄漏", r"爆炸", r"着火", r"煤气味", r"燃气味",
+    r"臭鸡蛋", r"起火", r"爆燃", r"中毒", r"一氧化碳",
+    r"昏迷", r"烧伤", r"明火", r"砰", r"轰",
 ]
 
 
@@ -114,10 +121,16 @@ def detect_danger(msg: str) -> bool:
     for p in NON_GAS_CONTEXT:
         if re.search(p, msg):
             return False
-    # 安全语境 → False
-    for p in SAFE_CONTEXT:
-        if re.search(p, msg):
-            return False
+
+    # 先检查是否有强危险词（安全高于一切）
+    has_strong = any(re.search(p, msg) for p in STRONG_DANGER)
+
+    # 安全语境 → False（但强危险词除外）
+    if not has_strong:
+        for p in SAFE_CONTEXT:
+            if re.search(p, msg):
+                return False
+
     # 危险词 → True
     for p in DANGER_PATTERNS:
         if re.search(p, msg):
