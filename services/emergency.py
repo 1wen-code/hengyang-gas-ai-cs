@@ -1,16 +1,12 @@
 """
-衡阳市天然气AI客服智能体 — 三级风险判断系统
-一级(普通) = 正常回答  二级(疑似) = 黄色提醒  三级(高危) = 红色警报+工单
+衡阳市天然气AI客服 — 三级风险判断 + 工单生成
 """
-import csv, os, uuid, re
+import re, os
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TICKETS_PATH = os.path.join(BASE_DIR, "logs", "tickets.csv")
-EMERGENCY_LOG_PATH = os.path.join(BASE_DIR, "logs", "emergency.log")
-os.makedirs(os.path.dirname(TICKETS_PATH), exist_ok=True)
 
-# ── 安全词：含这些词的提问降级为普通 ──────────
+# ── 安全词 ──────────────────────────────────
 SAFE_CONTEXTS = [
     "打不着", "打不燃", "点不着", "打不着火", "打不燃火",
     "没热水", "不出热水", "热水器.*不",
@@ -21,15 +17,12 @@ SAFE_CONTEXTS = [
     "火盖.*堵", "火孔.*堵",
 ]
 
-# ── 一级(普通)：正常业务问题 ──────────────────
-# 不触发任何警报，走标准FAQ/AI流程
 LEVEL1_KEYWORDS = [
     "没热水", "打不着火", "火焰小", "红火", "黄火",
     "电池没电", "电池更换", "换电池", "欠费停气",
     "IC卡充值", "余额不足", "充值不到账",
 ]
 
-# ── 二级(疑似风险)：黄色提醒 ──────────────────
 LEVEL2_KEYWORDS = [
     "闻到煤气味", "闻到燃气味", "有煤气味", "有燃气味",
     "刺鼻气味", "异味", "臭味", "像漏气",
@@ -42,7 +35,6 @@ LEVEL2_KEYWORDS = [
     "燃气泄漏", "漏气", "天然气泄漏",
 ]
 
-# ── 三级(高危紧急)：红色警报+强制转人工 ────────
 LEVEL3_KEYWORDS = [
     "爆炸", "爆燃", "炸了", "着火", "起火", "火灾", "明火",
     "大量泄漏", "一直漏气", "严重漏气", "管道破裂", "管道裂了",
@@ -51,8 +43,6 @@ LEVEL3_KEYWORDS = [
     "烧伤", "烫伤严重", "有人受伤",
     "中毒", "一氧化碳",
 ]
-
-# ── 回复模板 ──────────────────────────────────
 
 LEVEL2_REPLY = """检测到可能存在燃气安全风险。
 
@@ -76,7 +66,6 @@ LEVEL3_REPLY = """检测到可能存在燃气安全风险。
 
 
 def _is_safe_context(question: str) -> bool:
-    """判断是否为安全语境（普通故障咨询，非紧急）"""
     for pattern in SAFE_CONTEXTS:
         if re.search(pattern, question):
             return True
@@ -84,73 +73,35 @@ def _is_safe_context(question: str) -> bool:
 
 
 def detect_emergency(question: str) -> dict:
-    """
-    三级风险检测。
-    返回: {level: 1|2|3, is_emergency: bool, reply: str, matched: [...], reason: str}
-    """
-    # Step 0: 安全语境检查（对所有级别生效）
     if _is_safe_context(question):
-        return {"level": 1, "is_emergency": False, "risk_label": "普通", "matched": [], "reply": "", "reason": "安全语境（故障咨询）", "action": "正常回答"}
+        return {"level": 1, "is_emergency": False, "risk_label": "普通",
+                "matched": [], "reply": "", "reason": "安全语境（故障咨询）", "action": "正常回答"}
 
-    # Step 1: 检查三级（高危）
     matched_3 = [kw for kw in LEVEL3_KEYWORDS if kw in question]
     if matched_3:
-        return {
-            "level": 3, "is_emergency": True,
-            "risk_label": "高危", "matched": matched_3,
-            "reply": LEVEL3_REPLY,
-            "reason": f"命中高危关键词: {', '.join(matched_3)}",
-            "action": "红色警报 + 自动工单 + 强制转人工",
-        }
+        return {"level": 3, "is_emergency": True, "risk_label": "高危",
+                "matched": matched_3, "reply": LEVEL3_REPLY,
+                "reason": f"命中高危关键词: {', '.join(matched_3)}",
+                "action": "红色警报 + 自动工单 + 强制转人工"}
 
-    # Step 2: 检查二级（疑似风险）
     matched_2 = [kw for kw in LEVEL2_KEYWORDS if kw in question]
     if matched_2:
-        return {
-            "level": 2, "is_emergency": True,
-            "risk_label": "疑似风险", "matched": matched_2,
-            "reply": LEVEL2_REPLY,
-            "reason": f"命中疑似关键词: {', '.join(matched_2)}",
-            "action": "黄色提醒 + 安全建议 + 推荐人工",
-        }
+        return {"level": 2, "is_emergency": True, "risk_label": "疑似风险",
+                "matched": matched_2, "reply": LEVEL2_REPLY,
+                "reason": f"命中疑似关键词: {', '.join(matched_2)}",
+                "action": "黄色提醒 + 安全建议 + 推荐人工"}
 
-    # Step 3: 一级（普通）
-    return {"level": 1, "is_emergency": False, "risk_label": "普通", "matched": [], "reply": "", "reason": "普通业务问题", "action": "正常回答"}
+    return {"level": 1, "is_emergency": False, "risk_label": "普通",
+            "matched": [], "reply": "", "reason": "普通业务问题", "action": "正常回答"}
 
 
-def generate_ticket(question: str, risk_level: str, ip: str = "", user_session: str = "") -> dict:
-    """生成紧急工单（仅三级高危）"""
+def generate_ticket(question: str, risk_level: str, ip: str = "", user_id: str = "") -> dict:
+    from db import add_ticket
+    import uuid
     ticket_id = f"EM-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
-    created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    ticket = {
-        "工单ID": ticket_id, "时间": created_at,
-        "用户问题": question, "风险等级": risk_level,
-        "分类": "紧急事件", "状态": "处理中",
-        "处理人": "调度中心A组",
-        "用户IP": ip, "用户标识": user_session,
-    }
-    os.makedirs(os.path.dirname(TICKETS_PATH), exist_ok=True)
-    fieldnames = list(ticket.keys())
-    need_header = not os.path.exists(TICKETS_PATH) or os.path.getsize(TICKETS_PATH) == 0
-    # 检查表头完整性
-    if not need_header:
-        try:
-            with open(TICKETS_PATH, "r", encoding="utf-8-sig") as f:
-                reader = csv.DictReader(f)
-                if not reader.fieldnames or len(reader.fieldnames) < len(fieldnames):
-                    need_header = True
-        except:
-            pass
-    with open(TICKETS_PATH, "a", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        if need_header:
-            writer.writeheader()
-        writer.writerow(ticket)
-    return ticket
+    return add_ticket(ticket_id, question, risk_level, ip, user_id)
 
 
 def log_emergency(question: str, risk_level: str, ip: str = "", ticket_id: str = ""):
-    """写入日志（二级+三级）"""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(EMERGENCY_LOG_PATH, "a", encoding="utf-8") as f:
-        f.write(f"[{timestamp}] [{risk_level}] IP={ip} TICKET={ticket_id} Q={question}\n")
+    from db import add_emergency_log
+    add_emergency_log(question, risk_level, ip, ticket_id)

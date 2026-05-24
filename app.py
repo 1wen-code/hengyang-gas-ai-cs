@@ -5,7 +5,12 @@ from flask import Flask, render_template, request, jsonify, session, redirect
 from config import SECRET_KEY, DEBUG
 from router import route
 from services.knowledge_service import KnowledgeService
-import os, csv, pandas as pd, uuid
+from db import (
+    add_chat, get_chat_logs, get_tickets, get_user_tickets,
+    resolve_ticket, archive_resolved, ticket_count,
+    get_emergency_logs, emergency_log_count, get_risk_trends,
+)
+import os, pandas as pd, uuid
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
@@ -37,27 +42,14 @@ def chat():
     if not sid:
         sid = uuid.uuid4().hex[:12]
         session["user_id"] = sid
-    # 同步到 session_manager，供 danger_handler 写工单用
     from session_manager import sessions
     sessions.get(sid)["user_id"] = sid
 
     result = route(question, sid, client_ip, client_history)
 
-    # 写入日志
+    # 写入 SQLite
     try:
-        from datetime import datetime
-        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "chat_log.csv")
-        exists = os.path.exists(p)
-        with open(p, "a", newline="", encoding="utf-8-sig") as f:
-            w = csv.writer(f)
-            if not exists:
-                w.writerow(["时间", "用户问题", "AI回答", "模式"])
-            w.writerow([
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                question[:200],
-                result.get("reply", "")[:200],
-                result.get("mode", ""),
-            ])
+        add_chat(question, result.get("reply", ""), result.get("mode", ""))
     except:
         pass
 
@@ -103,19 +95,13 @@ def admin():
         pc = len(pd.read_csv(KB_POLICY_PATH, encoding="utf-8-sig"))
     except: pass
 
-    tickets, logs = [], []
-    tp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
-    lp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "emergency.log")
-    try:
-        with open(tp, "r", encoding="utf-8-sig") as f:
-            tickets = list(csv.DictReader(f))[-20:]
-    except: pass
-    try:
-        with open(lp, "r", encoding="utf-8") as f:
-            logs = f.readlines()[-20:]
-    except: pass
-
-    return render_template("admin.html", faq_count=fc, policy_count=pc, tickets=tickets, logs=logs)
+    return render_template("admin.html",
+        faq_count=fc, policy_count=pc,
+        tickets=get_tickets(20),
+        logs=get_emergency_logs(20),
+        ticket_count=ticket_count(),
+        log_count=emergency_log_count(),
+    )
 
 
 @app.route("/admin/reload", methods=["POST"])
@@ -147,18 +133,7 @@ def admin_upload():
 def admin_tickets_clear():
     if not _admin(): return jsonify({"error": "未登录"}), 401
     try:
-        tp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
-        rows = []
-        with open(tp, "r", encoding="utf-8-sig") as f:
-            r = csv.DictReader(f)
-            fn = r.fieldnames
-            for row in r:
-                row.pop(None, None)
-                if row.get("状态") != "已解决":
-                    rows.append(row)
-        with open(tp, "w", encoding="utf-8-sig", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=fn)
-            w.writeheader(); w.writerows(rows)
+        archive_resolved()
         return jsonify({"status": "ok"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -168,19 +143,7 @@ def admin_tickets_clear():
 def admin_tickets_resolve(tid):
     if not _admin(): return jsonify({"error": "未登录"}), 401
     try:
-        tp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
-        rows = []
-        with open(tp, "r", encoding="utf-8-sig") as f:
-            r = csv.DictReader(f)
-            fn = r.fieldnames
-            for row in r:
-                row.pop(None, None)
-                if row.get("工单ID") == tid:
-                    row["状态"] = "已解决"
-                rows.append(row)
-        with open(tp, "w", encoding="utf-8-sig", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=fn)
-            w.writeheader(); w.writerows(rows)
+        resolve_ticket(tid)
         return jsonify({"status": "ok"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -189,23 +152,13 @@ def admin_tickets_resolve(tid):
 @app.route("/my-tickets")
 def my_tickets():
     uid = session.get("user_id", "")
-    tp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
-    my = []
-    try:
-        with open(tp, "r", encoding="utf-8-sig") as f:
-            for row in csv.DictReader(f):
-                if row.get("用户标识") == uid:
-                    my.append(row)
-    except: pass
-    return render_template("my_tickets.html", tickets=my)
+    return render_template("my_tickets.html", tickets=get_user_tickets(uid))
 
 
 @app.route("/admin/tickets")
 def admin_tickets():
-    tp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
     try:
-        with open(tp, "r", encoding="utf-8-sig") as f:
-            return jsonify(list(csv.DictReader(f)))
+        return jsonify(get_tickets(50))
     except:
         return jsonify([])
 
@@ -213,10 +166,8 @@ def admin_tickets():
 @app.route("/admin/chat-logs")
 def admin_chat_logs():
     if not _admin(): return jsonify({"error": "未登录"}), 401
-    lp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "chat_log.csv")
     try:
-        with open(lp, "r", encoding="utf-8-sig") as f:
-            return jsonify(list(csv.DictReader(f))[-50:])
+        return jsonify(get_chat_logs(50))
     except:
         return jsonify([])
 
@@ -224,23 +175,10 @@ def admin_chat_logs():
 @app.route("/admin/risk-trends")
 def admin_risk_trends():
     if not _admin(): return jsonify({"error": "未登录"}), 401
-    from datetime import datetime, timedelta
-    tp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "tickets.csv")
-    trends = {}
-    for i in range(6, -1, -1):
-        trends[(datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")] = {"high": 0, "medium": 0, "total": 0}
     try:
-        with open(tp, "r", encoding="utf-8-sig") as f:
-            for row in csv.DictReader(f):
-                d = row.get("时间", "")[:10]
-                if d in trends:
-                    trends[d]["total"] += 1
-                    if row.get("风险等级", "") in ("高危", "紧急"):
-                        trends[d]["high"] += 1
-                    else:
-                        trends[d]["medium"] += 1
-    except: pass
-    return jsonify(list(trends.items()))
+        return jsonify(get_risk_trends(7))
+    except:
+        return jsonify([])
 
 
 if __name__ == "__main__":
