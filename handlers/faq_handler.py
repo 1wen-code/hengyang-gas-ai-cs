@@ -4,6 +4,7 @@ FAQ Handler — 知识库检索 + AI 自然组织语言 + 多轮上下文
 from deepseek_client import deepseek
 from prompts import FAQ_PROMPT
 from services.knowledge_service import KnowledgeService
+from config import MATCH_THRESHOLD
 
 _kb = None
 
@@ -49,7 +50,7 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
     top_k = kb.search_top_k(search_query, k=3)
 
     context = "无参考资料"
-    if faq and faq.get("score", 0) >= 0.20:
+    if faq and faq.get("score", 0) >= MATCH_THRESHOLD:
         context = f"【最匹配】Q: {faq['question']}\nA: {faq['answer']}"
     elif top_k:
         parts = []

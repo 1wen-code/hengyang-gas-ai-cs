@@ -11,8 +11,20 @@ class SessionManager:
 
     def __init__(self):
         self._s = {}
+        self._last_cleanup = time.time()
+
+    def _cleanup(self):
+        now = time.time()
+        if now - self._last_cleanup < 300:  # 每5分钟清理一次
+            return
+        self._last_cleanup = now
+        expired = [sid for sid, s in self._s.items()
+                   if now - s.get("last_active", 0) > 3600]
+        for sid in expired:
+            del self._s[sid]
 
     def get(self, sid: str) -> dict:
+        self._cleanup()
         if sid not in self._s:
             self._s[sid] = self._new()
         self._s[sid]["last_active"] = time.time()

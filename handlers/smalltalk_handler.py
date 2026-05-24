@@ -18,6 +18,6 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
             max_tokens=120,
         )
         if reply:
-            return {"reply": reply, "mode": "smalltalk"}
+            return {"reply": reply, "mode": "smalltalk", "source": "smalltalk"}
 
-    return {"reply": "您好，请问有什么燃气方面的问题需要咨询？", "mode": "smalltalk"}
+    return {"reply": "您好，请问有什么燃气方面的问题需要咨询？", "mode": "smalltalk", "source": "smalltalk"}

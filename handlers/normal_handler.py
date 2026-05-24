@@ -4,6 +4,7 @@ Normal Handler — 通用 AI 回答，带多轮上下文
 from deepseek_client import deepseek
 from prompts import NORMAL_PROMPT
 from services.knowledge_service import KnowledgeService
+from config import MATCH_THRESHOLD
 
 _kb = None
 
@@ -23,7 +24,7 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
     top_k = kb.search_top_k(message, k=2)
 
     context = "无参考资料"
-    if faq and faq.get("score", 0) >= 0.20:
+    if faq and faq.get("score", 0) >= MATCH_THRESHOLD:
         context = f"Q: {faq['question']}\nA: {faq['answer']}"
     elif top_k:
         parts = []
@@ -41,6 +42,7 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
             return {
                 "reply": reply,
                 "mode": "normal",
+                "source": "normal_handler",
                 "matched": faq.get("question", "") if faq else "",
                 "category": faq.get("category", "") if faq else "",
             }
@@ -48,4 +50,5 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
     return {
         "reply": "您好，请问您遇到了什么燃气问题？我可以帮您查询或引导处理。",
         "mode": "normal",
+        "source": "normal_handler",
     }

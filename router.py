@@ -49,7 +49,8 @@ def route(message: str, session_id: str, client_ip: str = "",
             sessions.set_mode(session_id, "normal")
             reply = "好的，确认安全了。还有其他燃气问题需要帮您吗？"
             _save_history(session_id, message, reply)
-            return {"reply": reply, "mode": "normal"}
+            return {"reply": reply, "mode": "normal", "source": "guide",
+                    "risk": {"level": 1, "label": "普通"}, "risk_code": 1, "risk_level": "普通"}
 
         result = handle_danger(message, session, client_ip)
         if result.get("reply") is not None:
