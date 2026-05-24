@@ -105,7 +105,10 @@ def add_chat(question: str, reply: str, mode: str = "", source: str = ""):
 
 
 def get_chat_logs(limit: int = 50):
-    return _get("chat_logs", order="created_at.desc", limit=limit)
+    rows = _get("chat_logs", order="created_at.desc", limit=limit)
+    return [{"用户问题": r.get("user_question", ""), "AI回答": r.get("ai_reply", ""),
+             "时间": r.get("created_at", ""), "模式": r.get("mode", ""),
+             "风险等级": r.get("risk_level", "普通")} for r in rows]
 
 
 # ═══ 安全日志 ═══
