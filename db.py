@@ -53,21 +53,36 @@ def _delete(table: str, where: str):
 
 # ═══ 工单 ═══
 
+def _map_ticket(r: dict) -> dict:
+    """Supabase英文字段 → 模板中文字段"""
+    return {
+        "工单ID": r.get("id", ""),
+        "时间": r.get("created_at", ""),
+        "用户问题": r.get("user_question", ""),
+        "风险等级": r.get("risk_level", ""),
+        "分类": r.get("category") or "紧急事件",
+        "状态": r.get("status") or "处理中",
+        "处理人": r.get("handler") or "调度中心A组",
+        "用户IP": r.get("user_ip", ""),
+        "用户标识": r.get("user_id", ""),
+    }
+
+
 def add_ticket(ticket_id: str, question: str, risk_level: str, ip: str = "", user_id: str = ""):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     _post("tickets", {"id": ticket_id, "created_at": now, "user_question": question,
-        "risk_level": risk_level, "user_ip": ip, "user_id": user_id})
-    return {"工单ID": ticket_id, "时间": now, "用户问题": question,
-            "风险等级": risk_level, "分类": "紧急事件", "状态": "处理中",
-            "处理人": "调度中心A组", "用户IP": ip, "用户标识": user_id}
+        "risk_level": risk_level, "category": "紧急事件", "status": "处理中",
+        "user_ip": ip, "user_id": user_id})
+    return _map_ticket({"id": ticket_id, "created_at": now, "user_question": question,
+                        "risk_level": risk_level, "user_ip": ip, "user_id": user_id})
 
 
 def get_tickets(limit: int = 20):
-    return _get("tickets", order="created_at.desc", limit=limit)
+    return [_map_ticket(r) for r in _get("tickets", order="created_at.desc", limit=limit)]
 
 
 def get_user_tickets(user_id: str):
-    return _get("tickets", where=f"user_id=eq.{user_id}", order="created_at.desc", limit=50)
+    return [_map_ticket(r) for r in _get("tickets", where=f"user_id=eq.{user_id}", order="created_at.desc", limit=50)]
 
 
 def resolve_ticket(ticket_id: str):

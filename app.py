@@ -49,7 +49,7 @@ def chat():
 
     # 写入 Supabase
     try:
-        add_chat(question, result.get("reply", ""), result.get("mode", ""))
+        add_chat(question, result.get("reply", ""), result.get("mode", ""), result.get("source", ""))
     except:
         pass
 
