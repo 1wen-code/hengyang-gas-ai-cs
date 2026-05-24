@@ -7,6 +7,16 @@ from services.knowledge_service import KnowledgeService
 
 _kb = None
 
+# 话题关键词映射，用于提取核心话题
+TOPIC_EXTRACT = {
+    "开户": ["开户", "报装", "新装", "安装费", "点火", "通气"],
+    "缴费": ["缴费", "充值", "交费", "气价", "阶梯", "欠费"],
+    "过户": ["过户", "变更", "换户主"],
+    "维修": ["维修", "报修", "故障", "打不着", "不出热水"],
+    "安检": ["安检", "检查", "安全"],
+    "投诉": ["投诉", "意见", "建议"],
+}
+
 
 def _get_kb():
     global _kb
@@ -18,16 +28,24 @@ def _get_kb():
 def handle(message: str, session: dict, client_ip: str = "") -> dict:
     kb = _get_kb()
 
-    # 多轮上下文：用 last_topic 增强搜索
     topic = session.get("last_topic", "")
-    search_query = message
-    if topic and len(message.strip()) <= 8:
-        # 短追问 → 结合话题搜索
-        search_query = f"{topic} {message}"
+    msg = message.strip()
+
+    # 多轮上下文：短追问用话题增强搜索
+    search_query = msg
+    topic_tag = ""
+    if topic and len(msg) <= 10:
+        # 提取核心话题词
+        for key, keywords in TOPIC_EXTRACT.items():
+            if any(kw in topic for kw in keywords):
+                topic_tag = key
+                break
+        if topic_tag:
+            search_query = f"{topic_tag} {msg}"
 
     faq = kb.search_faq(search_query)
     if not faq:
-        faq = kb.search_faq(message)
+        faq = kb.search_faq(msg)
     top_k = kb.search_top_k(search_query, k=3)
 
     context = "无参考资料"
@@ -42,16 +60,20 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
     history = session.get("history", [])
 
     if deepseek:
-        topic_hint = f"（当前话题：{topic}）" if topic else ""
-        user_msg = f"问题：{message}{topic_hint}\n\n参考资料：\n{context}"
+        # 强话题提示
+        topic_line = f"上一轮话题：{topic_tag or topic}。用户在追问。" if topic else ""
+        user_msg = f"{topic_line}\n问题：{msg}\n\n参考资料：\n{context}"
         reply = deepseek.chat(FAQ_PROMPT, user_msg, history=history,
                               temperature=0.3, max_tokens=300)
         if reply:
+            # 更新话题：保留原话题（不覆盖，除非是新话题）
+            new_category = faq.get("category", "") if faq else ""
             return {
                 "reply": reply,
                 "mode": "faq",
                 "matched": faq.get("question", "") if faq else "",
-                "category": faq.get("category", "") if faq else "",
+                "category": new_category,
+                "topic_tag": topic_tag,
             }
 
     if faq:

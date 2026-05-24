@@ -52,6 +52,46 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
             "ticket": None,
         }
 
+    # 明确危险词 → 极速路径，不调 AI，直接返回固定安全指令
+    FAST_DANGER = {
+        "漏气": "立即关闭燃气总阀门！开窗通风！不要开关任何电器！不要使用明火！迅速撤离到室外安全处！",
+        "泄漏": "立即关闭燃气总阀门！开窗通风！不要开关任何电器！不要使用明火！迅速撤离到室外安全处！",
+        "煤气味": "立即关闭燃气总阀门！开窗通风！不要开关任何电器！不要使用明火！迅速撤离到室外安全处！",
+        "燃气味": "立即关闭燃气总阀门！开窗通风！不要开关任何电器！不要使用明火！迅速撤离到室外安全处！",
+        "着火": "立即关闭燃气总阀门！拨打119！迅速撤离！不要返回室内！",
+        "起火": "立即关闭燃气总阀门！拨打119！迅速撤离！不要返回室内！",
+        "爆炸": "立即关闭燃气总阀门！拨打119！迅速撤离！不要返回室内！",
+        "爆燃": "立即关闭燃气总阀门！拨打119！迅速撤离！不要返回室内！",
+    }
+    for kw, action in FAST_DANGER.items():
+        if kw in message:
+            # 生成工单
+            risk = detect_emergency(message)
+            ticket_id = None
+            risk_label = "高危"
+            risk_level_num = 3
+            if risk and risk["level"] >= 2:
+                import uuid
+                uid = str(uuid.uuid4().hex[:12])
+                t = generate_ticket(message, risk["risk_label"] or risk_label, client_ip, uid)
+                log_emergency(message, risk["risk_label"] or risk_label, client_ip, t["工单ID"])
+                ticket_id = t["工单ID"]
+                risk_label = risk["risk_label"] or risk_label
+                risk_level_num = risk["level"]
+            src = "emergency" if risk_level_num >= 3 else "warning"
+            reply = action + f" 抢修电话：0734-8677777"
+            if ticket_id:
+                reply = f"[工单 {ticket_id}] {reply}"
+            return {
+                "reply": reply,
+                "mode": "danger",
+                "source": src,
+                "risk": {"level": risk_level_num, "label": risk_label},
+                "risk_code": risk_level_num,
+                "risk_level": risk_label,
+                "ticket": ticket_id,
+            }
+
     # 生成工单
     risk = detect_emergency(message)
     ticket_id = None

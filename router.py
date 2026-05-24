@@ -88,10 +88,15 @@ def route(message: str, session_id: str, client_ip: str = "",
         result = handle_faq(message, session)
         if result.get("reply") is not None:
             sessions.set_mode(session_id, "faq")
-            sessions.set_topic(session_id, result.get("category", ""))
+            # 优先用 topic_tag（更精确），否则用 category
+            new_topic = result.get("topic_tag") or result.get("category", "")
+            if new_topic and len(message.strip()) > 4:
+                # 长消息=新话题，短消息=保持旧话题
+                sessions.set_topic(session_id, new_topic)
+            elif not new_topic:
+                pass  # 保持旧话题
             _save_history(session_id, message, result["reply"])
             return result
-        # FAQ 未命中 → 降级 normal
 
     # ═════════════════════════════════════════
     # 6. NORMAL — 兜底
