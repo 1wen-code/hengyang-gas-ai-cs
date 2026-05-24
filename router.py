@@ -47,9 +47,11 @@ def route(message: str, session_id: str, client_ip: str = "",
         session = sessions.get(session_id)
 
     # ═════════════════════════════════════════
-    # 1. SMALLTALK — 最高优先
+    # 1. SMALLTALK — 最高优先（非 danger 模式下）
     # ═════════════════════════════════════════
-    if detect_smalltalk(message):
+    # 注意：如果当前已在 danger 模式，跳过 smalltalk 检测，
+    # 让取消危险词（骗你的等）走恢复确认流程
+    if session["mode"] != "danger" and detect_smalltalk(message):
         sessions.set_mode(session_id, "smalltalk")
         result = handle_smalltalk(message, session)
         _save_history(session_id, message, result["reply"])
