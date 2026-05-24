@@ -52,15 +52,21 @@ def route(message: str, session_id: str, client_ip: str = "",
             return {"reply": reply, "mode": "normal", "source": "guide",
                     "risk": {"level": 1, "label": "普通"}, "risk_code": 1, "risk_level": "普通"}
 
-        result = handle_danger(message, session, client_ip)
-        if result.get("reply") is not None:
-            new_mode = result.get("mode", "danger")
-            sessions.set_mode(session_id, new_mode)
-            if new_mode == "normal":
-                sessions.reset(session_id)
-            _save_history(session_id, message, result["reply"])
-            return result
-        # reply=None → 降级，继续往下走
+        # 明显是业务问题 → 自动退出 danger，正常处理
+        if detect_faq(message) and not detect_danger(message):
+            sessions.set_mode(session_id, "normal")
+            # 继续往下走到 FAQ 分支
+
+        else:
+            result = handle_danger(message, session, client_ip)
+            if result.get("reply") is not None:
+                new_mode = result.get("mode", "danger")
+                sessions.set_mode(session_id, new_mode)
+                if new_mode == "normal":
+                    sessions.reset(session_id)
+                _save_history(session_id, message, result["reply"])
+                return result
+            # reply=None → 降级，继续往下走
 
     # ═════════════════════════════════════════
     # 3. 新 DANGER 检测
