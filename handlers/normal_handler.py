@@ -1,5 +1,5 @@
 """
-Normal Handler — 通用 AI 回答，带多轮上下文
+Normal Handler — AI 回答，80字以内，简洁专业
 """
 from deepseek_client import deepseek
 from prompts import NORMAL_PROMPT
@@ -37,7 +37,7 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
     if deepseek:
         user_msg = f"问题：{message}\n\n参考资料：\n{context}"
         reply = deepseek.chat(NORMAL_PROMPT, user_msg, history=history,
-                              temperature=0.3, max_tokens=300)
+                              temperature=0.3, max_tokens=200)
         if reply:
             return {
                 "reply": reply,
@@ -48,7 +48,7 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
             }
 
     return {
-        "reply": "您好，请问您遇到了什么燃气问题？我可以帮您查询或引导处理。",
+        "reply": "您好，请问有什么燃气问题需要咨询？如需人工服务请拨打 0734-8677777。",
         "mode": "normal",
         "source": "normal_handler",
     }
