@@ -237,40 +237,16 @@
         msgContent.innerHTML = renderContent(content);
         body.appendChild(msgContent);
 
-        // 元数据
-        if (source && role === "bot") {
+        // 元数据：只显示用户可理解的标签，不显示 handler 内部名
+        if (source && role === "bot" && SOURCE_LABELS[source]) {
             const meta = document.createElement("div");
             meta.className = "message-meta";
 
-            const label = SOURCE_LABELS[source] || source;
-
+            const label = SOURCE_LABELS[source];
             const tag = document.createElement("span");
             tag.className = "source-tag " + source;
             tag.textContent = label;
             meta.appendChild(tag);
-
-            if (ragCount && ragCount > 0) {
-                const ragSpan = document.createElement("span");
-                ragSpan.textContent = "上下文：" + ragCount + " 条";
-                meta.appendChild(ragSpan);
-            }
-            if (matchQuestion) {
-                const matchSpan = document.createElement("span");
-                matchSpan.textContent = "匹配：" + matchQuestion;
-                meta.appendChild(matchSpan);
-            }
-            if (category) {
-                const catSpan = document.createElement("span");
-                catSpan.textContent = "分类：" + category;
-                meta.appendChild(catSpan);
-            }
-            if (lawBasis) {
-                const lawSpan = document.createElement("span");
-                lawSpan.style.color = "var(--text-muted)";
-                lawSpan.textContent = "依据：" + lawBasis;
-                meta.appendChild(lawSpan);
-            }
-
             body.appendChild(meta);
         }
 
