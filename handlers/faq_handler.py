@@ -1,6 +1,7 @@
 """
 FAQ Handler — 知识库直接返回，不调用 AI
 """
+import jieba
 from services.knowledge_service import KnowledgeService
 from config import MATCH_THRESHOLD
 
@@ -53,10 +54,19 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
         if topic_tag:
             search_query = f"{topic_tag} {msg}"
 
-    # 知识库检索
+    # 知识库检索（多级回退）
     faq = kb.search_faq(search_query)
     if not faq or faq.get("score", 0) < MATCH_THRESHOLD:
         faq = kb.search_faq(msg)
+    # 上下文回退：用话题标签搜索，再筛选包含用户追问关键词的FAQ
+    if (not faq or faq.get("score", 0) < MATCH_THRESHOLD) and topic_tag:
+        candidates = kb.search_top_k(topic_tag, k=10)
+        msg_words = set(jieba.lcut(msg))
+        for c in candidates:
+            c_words = set(jieba.lcut(c["question"]))
+            if msg_words & c_words and c.get("score", 0) >= MATCH_THRESHOLD * 0.7:
+                faq = c
+                break
 
     if faq and faq.get("score", 0) >= MATCH_THRESHOLD:
         # 通用场景过滤：FAQ问题中多余的词太多 → 匹配不精确，降级 normal

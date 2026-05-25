@@ -144,7 +144,7 @@ def route(message: str, session_id: str, client_ip: str = "",
             sessions.set_mode(session_id, "faq")
             # 优先用 topic_tag（更精确），否则用 category
             new_topic = result.get("topic_tag") or result.get("category", "")
-            if new_topic and len(message.strip()) > 4:
+            if new_topic and len(message.strip()) >= 3:
                 # 长消息=新话题，短消息=保持旧话题
                 sessions.set_topic(session_id, new_topic)
             elif not new_topic:
