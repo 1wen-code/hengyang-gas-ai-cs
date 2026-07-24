@@ -10,4 +10,4 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.0
       - key: DEEPSEEK_API_KEY
-        sync: false
+        value: sk-aa331038688442c89a1d9b4d09dc5260
