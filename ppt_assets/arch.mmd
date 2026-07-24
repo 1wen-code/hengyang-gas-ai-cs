@@ -1,0 +1,51 @@
+---
+config:
+  theme: base
+  themeVariables:
+    primaryColor: "#6366F1"
+    primaryTextColor: "#ffffff"
+    secondaryColor: "#0E9589"
+    tertiaryColor: "#D9770C"
+    lineColor: "#6366F1"
+    fontSize: 13px
+---
+flowchart TB
+    subgraph L5["展示层"]
+        direction LR
+        A1["HTML5/CSS3/JS"]
+        A2["双主题切换"]
+        A3["毛玻璃效果"]
+    end
+    subgraph L4["应用层"]
+        direction LR
+        B1["Flask 路由"]
+        B2["会话管理"]
+        B3["权限控制"]
+    end
+    subgraph L3["服务层"]
+        direction LR
+        C1["DeepSeek AI"]
+        C2["知识检索"]
+        C3["风险检测"]
+        C4["意图识别"]
+    end
+    subgraph L2["数据层"]
+        direction LR
+        D1["CSV 知识库"]
+        D2["JSON 标签"]
+        D3["工单存储"]
+    end
+    subgraph L1["基础设施"]
+        direction LR
+        E1["Python 3.13"]
+        E2["Gunicorn"]
+        E3["Render Cloud"]
+    end
+
+    L5 --> L4 --> L3 --> L2 --> L1
+
+    style L5 fill:#6366F1,color:#fff,stroke:#6366F1,stroke-width:2px
+    style L4 fill:#0E9589,color:#fff,stroke:#0E9589,stroke-width:2px
+    style L3 fill:#D9770C,color:#fff,stroke:#D9770C,stroke-width:2px
+    style L2 fill:#6B7280,color:#fff,stroke:#6B7280,stroke-width:2px
+    style L1 fill:#111827,color:#fff,stroke:#111827,stroke-width:2px

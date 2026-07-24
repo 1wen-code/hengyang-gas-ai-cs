@@ -1,0 +1,20 @@
+---
+config:
+  theme: base
+  themeVariables:
+    primaryColor: "#0F4D92"
+    primaryTextColor: "#ffffff"
+    secondaryColor: "#42949E"
+    tertiaryColor: "#E67E22"
+    lineColor: "#767676"
+    fontSize: 14px
+---
+flowchart LR
+    A["本地开发<br/>Flask + Git"] -->|git push| B["GitHub<br/>代码托管"]
+    B -->|自动触发| C["Render Cloud<br/>Gunicorn + HTTPS"]
+    C -->|线上访问| D["用户<br/>浏览器 / API"]
+
+    style A fill:#0F4D92,color:#fff,stroke:#0F4D92,stroke-width:2px
+    style B fill:#42949E,color:#fff,stroke:#42949E,stroke-width:2px
+    style C fill:#E67E22,color:#fff,stroke:#E67E22,stroke-width:2px
+    style D fill:#2E9E44,color:#fff,stroke:#2E9E44,stroke-width:2px

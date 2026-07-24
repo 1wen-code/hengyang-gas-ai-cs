@@ -20,5 +20,5 @@ KB_TEMPLATE_PATH = os.path.join(BASE_DIR, "knowledge", "knowledge_template.xlsx"
 MATCH_THRESHOLD = 0.28
 
 # ── Flask ─────────────────────────────────────────
-SECRET_KEY = os.getenv("SECRET_KEY", "hengyang-gas-ai-cs-2024")
+SECRET_KEY = os.getenv("SECRET_KEY") or "hengyang-gas-ai-cs-2024"
 DEBUG = os.getenv("FLASK_DEBUG", "False").lower() == "true"
