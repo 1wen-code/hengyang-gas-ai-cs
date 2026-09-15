@@ -4,18 +4,18 @@
 from flask import Flask, render_template, request, jsonify, session, redirect
 from config import SECRET_KEY, DEBUG
 from router import route
-from services.knowledge_service import KnowledgeService
+from services.knowledge_service import get_kb
 from db import (
     add_chat, get_chat_logs, get_tickets, get_user_tickets,
     resolve_ticket, archive_resolved, ticket_count,
     get_emergency_logs, emergency_log_count, get_risk_trends,
 )
-import os, pandas as pd, uuid
+import os, shutil, pandas as pd, uuid
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
-kb = KnowledgeService()
+kb = get_kb()   # 全进程单例，reload() 对 handler 同样生效
 
 
 @app.route("/")
@@ -109,7 +109,7 @@ def admin_reload():
     if not _admin(): return jsonify({"error": "未登录"}), 401
     try:
         kb.reload()
-        return jsonify({"status": "ok"})
+        return jsonify({"status": "ok", "message": "知识库已重新加载"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -119,22 +119,48 @@ def admin_upload():
     if not _admin(): return jsonify({"error": "未登录"}), 401
     from config import KB_FAQ_PATH
     f = request.files.get("file")
-    if not f or not f.filename.endswith((".xlsx", ".csv")):
-        return jsonify({"status": "error", "message": "请上传.xlsx或.csv文件"}), 400
-    f.save(KB_FAQ_PATH if f.filename.endswith(".csv") else KB_FAQ_PATH.replace(".csv", ".xlsx"))
+    if not f or not f.filename.endswith(".csv"):
+        return jsonify({"status": "error", "message": "请上传 .csv 文件"}), 400
+
+    # 先落到临时文件校验，通过了才覆盖 —— 坏文件一旦落盘，
+    # 下次冷启动会在加载知识库时直接起不来
+    tmp = KB_FAQ_PATH + ".upload"
+    f.save(tmp)
+    try:
+        df = pd.read_csv(tmp, encoding="utf-8-sig")
+        for col in ("用户问题", "标准回答"):
+            if col not in df.columns:
+                raise ValueError(f"缺少「{col}」列")
+        if len(df) == 0:
+            raise ValueError("文件没有数据行")
+    except Exception as e:
+        os.remove(tmp)
+        return jsonify({"status": "error",
+                        "message": f"文件校验失败，已拒绝（原知识库未改动）：{e}"}), 400
+
+    bak = KB_FAQ_PATH + ".bak"
+    if os.path.exists(KB_FAQ_PATH):
+        shutil.copy(KB_FAQ_PATH, bak)
+    shutil.move(tmp, KB_FAQ_PATH)
     try:
         kb.reload()
-        return jsonify({"status": "ok"})
+        return jsonify({"status": "ok",
+                        "message": f"上传成功，知识库现有 {len(df)} 条"})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        shutil.copy(bak, KB_FAQ_PATH)      # 加载失败 → 回滚
+        kb.reload()
+        return jsonify({"status": "error",
+                        "message": f"加载失败，已回滚原知识库：{e}"}), 500
 
 
 @app.route("/admin/tickets/clear", methods=["POST"])
 def admin_tickets_clear():
     if not _admin(): return jsonify({"error": "未登录"}), 401
     try:
-        archive_resolved()
-        return jsonify({"status": "ok"})
+        if not archive_resolved():
+            return jsonify({"status": "error",
+                            "message": "归档失败：数据库未响应，工单未改动"}), 500
+        return jsonify({"status": "ok", "message": "已归档全部已解决工单"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -143,8 +169,10 @@ def admin_tickets_clear():
 def admin_tickets_resolve(tid):
     if not _admin(): return jsonify({"error": "未登录"}), 401
     try:
-        resolve_ticket(tid)
-        return jsonify({"status": "ok"})
+        if not resolve_ticket(tid):
+            return jsonify({"status": "error",
+                            "message": "更新失败：数据库未响应"}), 500
+        return jsonify({"status": "ok", "message": "工单已标记为已解决"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -157,6 +185,7 @@ def my_tickets():
 
 @app.route("/admin/tickets")
 def admin_tickets():
+    if not _admin(): return jsonify({"error": "未登录"}), 401
     try:
         return jsonify(get_tickets(50))
     except:

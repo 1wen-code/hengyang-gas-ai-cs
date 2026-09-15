@@ -23,6 +23,18 @@ RECOVERY_PROMPT = (
     "「仍需帮助」— 情况仍未解决，继续求助"
 )
 
+# 危险模式下用户插入业务问题：正常作答，但不解除风险状态
+DANGER_REMINDER = (
+    "\n\n---\n⚠️ 提醒：您刚才提到的燃气异味**尚未确认排除**。"
+    "如仍有气味，请立即关闭总阀门、开窗通风，并拨打 0734-8677777。"
+)
+
+# 恢复确认中插入业务问题：作答后只留一句确认提示，不再重复整段
+RECOVERY_REMINDER = (
+    "\n\n---\n您遇到的燃气风险是否已排除？"
+    "回复「已解决」解除风险状态，或「仍需帮助」继续求助。"
+)
+
 from session_manager import sessions
 from detectors import (
     detect_smalltalk, detect_danger, detect_cancel_danger,
@@ -40,6 +52,9 @@ def route(message: str, session_id: str, client_ip: str = "",
     """所有消息的唯一入口"""
 
     session = sessions.get(session_id)
+
+    # 危险期间插入业务问题 → 由 _apply_sticky 在作答后恢复风险状态
+    sticky = None
 
     # 新对话 → 重置状态
     if not client_history:
@@ -64,19 +79,10 @@ def route(message: str, session_id: str, client_ip: str = "",
 
         # ── 恢复确认子状态 ──
         if sessions.is_recovering(session_id):
-            # 用户确认安全 → 正式退出 danger
-            confirm_kw = ["已解决", "解决了", "处理了", "没事了", "修好了",
-                         "好了", "正常了", "安全了", "已处理", "搞定了",
-                         "没有危险", "不危险", "没问题", "确认安全", "是安全的"]
-            if any(kw in message for kw in confirm_kw):
-                sessions.confirm_leave_danger(session_id)
-                reply = "好的，已解除风险状态。如有其他燃气问题，可随时咨询。"
-                _save_history(session_id, message, reply)
-                return {"reply": reply, "mode": "normal", "source": "guide",
-                        "risk": {"level": 1, "label": "普通"}, "risk_code": 1, "risk_level": "普通"}
-
             # 用户表示仍需帮助 → 回到 danger
-            need_help = ["仍需帮助", "还要帮助", "没解决", "还有", "还在",
+            # 必须先判：confirm_kw 里「好了」「没问题」是子串匹配，
+            # 「阀门关好了，但还是有煤气味」会先撞上 confirm_kw 被判成安全
+            need_help = ["仍需帮助", "还要帮助", "没解决", "还有", "还在", "还是",
                         "仍然", "依然", "依旧", "继续", "需要帮助"]
             if any(kw in message for kw in need_help):
                 sessions.exit_recovery(session_id)
@@ -85,11 +91,28 @@ def route(message: str, session_id: str, client_ip: str = "",
                     _save_history(session_id, message, result["reply"])
                     return result
 
-            # 其他回复 → 再次提醒确认
-            reply = RECOVERY_PROMPT
-            _save_history(session_id, message, reply)
-            return {"reply": reply, "mode": "danger", "source": "warning",
-                    "risk": {"level": 2, "label": "恢复确认中"}}
+            # 用户确认安全 → 正式退出 danger
+            confirm_kw = ["已解决", "解决了", "处理了", "没事了", "修好了",
+                         "好了", "正常了", "安全了", "已处理", "搞定了",
+                         "没有危险", "不危险", "没问题", "确认安全", "是安全的"]
+            # 硬守卫：话里还带着危险信号，就不许判"已解除"。
+            # 「阀门关好了，但还是有煤气味」——"好了"是子串，靠词表挡不住
+            if any(kw in message for kw in confirm_kw) and not detect_danger(message):
+                sessions.confirm_leave_danger(session_id)
+                reply = "好的，已解除风险状态。如有其他燃气问题，可随时咨询。"
+                _save_history(session_id, message, reply)
+                return {"reply": reply, "mode": "normal", "source": "guide",
+                        "risk": {"level": 1, "label": "普通"}, "risk_code": 1, "risk_level": "普通"}
+
+            # 业务问题 → 正常作答，但保留确认状态（否则用户被锁死，什么都问不了）
+            if detect_faq(message) and not detect_danger(message):
+                sticky = "recovery"
+            else:
+                # 其他回复 → 再次提醒确认
+                reply = RECOVERY_PROMPT
+                _save_history(session_id, message, reply)
+                return {"reply": reply, "mode": "danger", "source": "warning",
+                        "risk": {"level": 2, "label": "恢复确认中"}}
 
         # ── 取消危险词 → 进入恢复确认状态 ──
         if detect_cancel_danger(message):
@@ -99,12 +122,13 @@ def route(message: str, session_id: str, client_ip: str = "",
             return {"reply": reply, "mode": "danger", "source": "warning",
                     "risk": {"level": 2, "label": "恢复确认中"}}
 
-        # ── 明显是业务问题 → 自动退出 danger，正常处理 ──
-        if detect_faq(message) and not detect_danger(message):
-            sessions.cancel_danger(session_id)
+        # ── 业务问题 → 作答但不退出 danger（静默退出会丢掉未排除的风险）──
+        # sticky is None 守卫：恢复确认态已判定过，别在这里被覆盖成 danger
+        if sticky is None and detect_faq(message) and not detect_danger(message):
+            sticky = "danger"
 
         # ── 继续危险处理 ──
-        else:
+        elif sticky is None:
             result = handle_danger(message, session, client_ip)
             if result.get("reply") is not None:
                 new_mode = result.get("mode", "danger")
@@ -132,6 +156,7 @@ def route(message: str, session_id: str, client_ip: str = "",
     if detect_human(message):
         sessions.set_mode(session_id, "human")
         result = handle_human(message, session)
+        result = _apply_sticky(session_id, result, sticky)
         _save_history(session_id, message, result["reply"])
         return result
 
@@ -149,6 +174,7 @@ def route(message: str, session_id: str, client_ip: str = "",
                 sessions.set_topic(session_id, new_topic)
             elif not new_topic:
                 pass  # 保持旧话题
+            result = _apply_sticky(session_id, result, sticky)
             _save_history(session_id, message, result["reply"])
             return result
 
@@ -157,7 +183,37 @@ def route(message: str, session_id: str, client_ip: str = "",
     # ═════════════════════════════════════════
     sessions.set_mode(session_id, "normal")
     result = handle_normal(message, session)
+    result = _apply_sticky(session_id, result, sticky)
     _save_history(session_id, message, result["reply"])
+    return result
+
+
+def _apply_sticky(session_id: str, result: dict, sticky: str | None) -> dict:
+    """
+    危险期间插入业务问题：照常作答，但不丢失风险状态。
+
+    sticky="danger"   危险模式中问业务问题 → 保留 danger + 安全提醒
+    sticky="recovery" 恢复确认中问业务问题 → 保留确认态 + 一句确认提示
+
+    背景：早先的做法是静默退出 danger，导致用户问完业务问题后
+    再说"还有味道"不会重新报警；恢复确认态则会死循环、什么都答不了。
+    """
+    if not sticky:
+        return result
+
+    sessions.set_mode(session_id, "danger")
+    if sticky == "recovery":
+        sessions.enter_recovery(session_id)
+        result["reply"] = (result.get("reply") or "") + RECOVERY_REMINDER
+        label = "恢复确认中"
+    else:
+        result["reply"] = (result.get("reply") or "") + DANGER_REMINDER
+        label = "疑似风险（未确认排除）"
+
+    result["mode"] = "danger"
+    result["risk"] = {"level": 2, "label": label}
+    result["risk_code"] = 2
+    result["risk_level"] = "疑似风险"
     return result
 
 

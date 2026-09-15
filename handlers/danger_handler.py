@@ -1,6 +1,7 @@
 """
 Danger Handler — 固定安全指令，不调用 AI
 """
+from detectors import detect_danger
 from services.emergency import detect_emergency, generate_ticket, log_emergency
 
 DANGER_REPLY = (
@@ -17,7 +18,9 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
     msg = message.strip()
 
     # 取消危险 → 退出
-    if any(kw in msg for kw in CANCEL_KW):
+    # CANCEL_KW 里「关好了」是子串：「阀门关好了，但还是有煤气味」不能算安全。
+    # 话里仍带危险信号时一律不予解除。
+    if any(kw in msg for kw in CANCEL_KW) and not detect_danger(message):
         return {
             "reply": "好的，确认安全了。还有其他燃气问题需要帮您吗？",
             "mode": "normal",
@@ -37,8 +40,10 @@ def handle(message: str, session: dict, client_ip: str = "") -> dict:
     if risk and risk_level >= 2:
         uid = session.get("user_id", "")
         t = generate_ticket(message, risk_label, client_ip, uid)
-        log_emergency(message, risk_label, client_ip, t["工单ID"])
-        ticket_id = t["工单ID"]
+        if t:
+            ticket_id = t["工单ID"]
+        # 落库失败时不编工单号，但安全事件照记 —— 用户看到的指引不受影响
+        log_emergency(message, risk_label, client_ip, ticket_id or "")
 
     source = "emergency" if risk_level >= 3 else "warning"
 

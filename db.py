@@ -2,7 +2,7 @@
 持久化存储 — Supabase PostgreSQL
 部署不丢数据
 """
-import json, urllib.request, urllib.error
+import json, urllib.request, urllib.error, urllib.parse
 from datetime import datetime, timedelta
 
 URL = "https://xvdyjppowidwquupawje.supabase.co"
@@ -10,20 +10,32 @@ KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2
 H = {"apikey": KEY, "Authorization": f"Bearer {KEY}", "Content-Type": "application/json"}
 
 
-def _post(table: str, data: dict):
+def _enc(where: str) -> str:
+    """PostgREST 的 where 子句要百分号编码。
+
+    原先中文直接拼进 URL（如 status=eq.已解决），urllib 发送前会抛
+    UnicodeEncodeError，被 except 吞掉 —— 于是"归档工单"永远删不掉却报成功。
+    """
+    return urllib.parse.quote(where, safe="=&")
+
+
+def _post(table: str, data: dict) -> bool:
+    """返回是否真的写成功 —— 调用方必须据此决定要不要告诉用户"""
     try:
         req = urllib.request.Request(f"{URL}/rest/v1/{table}",
             data=json.dumps(data).encode(), headers=H, method="POST")
         req.add_header("Prefer", "return=representation")
         urllib.request.urlopen(req, timeout=10)
+        return True
     except Exception as e:
         print(f"[DB] {table} error: {e}")
+        return False
 
 
 def _get(table: str, select: str = "*", where: str = "", order: str = "", limit: int = 50) -> list[dict]:
     try:
         url = f"{URL}/rest/v1/{table}?select={select}"
-        if where: url += f"&{where}"
+        if where: url += f"&{_enc(where)}"
         if order: url += f"&order={order}"
         if limit: url += f"&limit={limit}"
         req = urllib.request.Request(url, headers=H)
@@ -33,22 +45,27 @@ def _get(table: str, select: str = "*", where: str = "", order: str = "", limit:
         return []
 
 
-def _patch(table: str, where: str, data: dict):
+def _patch(table: str, where: str, data: dict) -> bool:
     try:
-        req = urllib.request.Request(f"{URL}/rest/v1/{table}?{where}",
+        req = urllib.request.Request(f"{URL}/rest/v1/{table}?{_enc(where)}",
             data=json.dumps(data).encode(), headers=H, method="PATCH")
         req.add_header("Prefer", "return=minimal")
         urllib.request.urlopen(req, timeout=10)
+        return True
     except Exception as e:
         print(f"[DB] {table} error: {e}")
+        return False
 
 
-def _delete(table: str, where: str):
+def _delete(table: str, where: str) -> bool:
     try:
-        req = urllib.request.Request(f"{URL}/rest/v1/{table}?{where}", headers=H, method="DELETE")
+        req = urllib.request.Request(f"{URL}/rest/v1/{table}?{_enc(where)}",
+            headers=H, method="DELETE")
         urllib.request.urlopen(req, timeout=10)
+        return True
     except Exception as e:
         print(f"[DB] {table} error: {e}")
+        return False
 
 
 # ═══ 工单 ═══
@@ -69,12 +86,18 @@ def _map_ticket(r: dict) -> dict:
 
 
 def add_ticket(ticket_id: str, question: str, risk_level: str, ip: str = "", user_id: str = ""):
+    """写入成功才返回工单对象；失败返回 None。
+
+    原先无论写没写进去都把入参拼成工单返回，界面照样显示
+    "已生成工单 EM-xxx"，而库里根本没有这条 —— 抢险工单不能这么假报。
+    """
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    _post("tickets", {"id": ticket_id, "created_at": now, "user_question": question,
-        "risk_level": risk_level, "category": "紧急事件", "status": "处理中",
-        "user_ip": ip, "user_id": user_id})
-    return _map_ticket({"id": ticket_id, "created_at": now, "user_question": question,
-                        "risk_level": risk_level, "user_ip": ip, "user_id": user_id})
+    row = {"id": ticket_id, "created_at": now, "user_question": question,
+           "risk_level": risk_level, "category": "紧急事件", "status": "处理中",
+           "user_ip": ip, "user_id": user_id}
+    if not _post("tickets", row):
+        return None
+    return _map_ticket(row)
 
 
 def get_tickets(limit: int = 20):
@@ -85,12 +108,12 @@ def get_user_tickets(user_id: str):
     return [_map_ticket(r) for r in _get("tickets", where=f"user_id=eq.{user_id}", order="created_at.desc", limit=50)]
 
 
-def resolve_ticket(ticket_id: str):
-    _patch("tickets", f"id=eq.{ticket_id}", {"status": "已解决"})
+def resolve_ticket(ticket_id: str) -> bool:
+    return _patch("tickets", f"id=eq.{ticket_id}", {"status": "已解决"})
 
 
-def archive_resolved():
-    _delete("tickets", "status=eq.已解决")
+def archive_resolved() -> bool:
+    return _delete("tickets", "status=eq.已解决")
 
 
 def ticket_count():

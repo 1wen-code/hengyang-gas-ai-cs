@@ -33,9 +33,11 @@ SMALLTALK_WORDS = [
 def detect_smalltalk(msg: str) -> bool:
     m = msg.strip()
     # 取消危险词
+    # 例外：「我家燃气漏气，但已经没事了」这类"泄漏描述 + 取消词"不能当闲聊 ——
+    # smalltalk 在 router 里优先级最高，直接 True 会把真实报警整个吞掉
     for kw in CANCEL_DANGER:
         if kw in m:
-            return True
+            return not detect_danger(m)
 
     # 极短输入：先排除可能含业务/危险词的
     if len(m) <= 2:
@@ -64,7 +66,7 @@ def detect_smalltalk(msg: str) -> bool:
 DANGER_PATTERNS = [
     r"漏气", r"泄漏", r"漏煤气", r"漏燃气",
     r"闻到.*燃气味", r"闻到.*煤气味", r"燃气味", r"煤气味", r"臭鸡蛋",
-    r"着火", r"起火", r"火灾", r"明火", r"烧起来",
+    r"(?<!不)着火", r"起火", r"火灾", r"明火", r"烧起来",
     r"爆炸", r"爆燃", r"炸了",
     r"中毒", r"一氧化碳",
     r"昏迷", r"没有呼吸", r"烧伤",
@@ -76,6 +78,9 @@ DANGER_PATTERNS = [
     r"臭臭", r"怪味", r"糊味", r"烧焦",
     r"厨房.*味道", r"厨房.*味", r"有.*怪味",
     r"热水器.*怪", r"燃气.*漏", r"嘶嘶",
+    # 漏气现场的口语化复述 — 用户不会每次都重说"燃气味"
+    r"还有.*味", r"还是有味", r"味.*没散", r"没散",
+    r"味道.*还在", r"味儿.*还在", r"还有味儿",
 ]
 
 # 非燃气场景 — 包含危险词但不是燃气事故，不触发 danger
@@ -110,7 +115,7 @@ SAFE_CONTEXT = [
 
 # 强危险词：即使触发了 SAFE_CONTEXT，这些词存在时仍应判定为危险
 STRONG_DANGER = [
-    r"漏气", r"泄漏", r"爆炸", r"(?<!打不)着火",
+    r"漏气", r"泄漏", r"爆炸", r"(?<!不)着火",
     r"煤气味", r"燃气味", r"臭鸡蛋", r"起火", r"爆燃",
     r"中毒", r"一氧化碳", r"昏迷", r"烧伤", r"明火", r"砰", r"轰",
 ]
@@ -139,6 +144,10 @@ def detect_danger(msg: str) -> bool:
 
 
 def detect_cancel_danger(msg: str) -> bool:
+    # 「阀门关好了，但还是有煤气味」这类"取消词 + 残留危险信号"不算解除，
+    # 否则会进恢复确认甚至直接判安全
+    if detect_danger(msg):
+        return False
     for kw in CANCEL_DANGER:
         if kw in msg:
             return True

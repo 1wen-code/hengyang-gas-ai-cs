@@ -308,3 +308,19 @@ class KnowledgeService:
         if policy_result:
             return {"type": "policy", "category": category, "data": policy_result}
         return {"type": "unmatched", "category": category, "data": None}
+
+
+# ═══════════════════════════════════════════════
+# 全局单例
+# ═══════════════════════════════════════════════
+# 原先 app.py、faq_handler、normal_handler 各自 new 了一个 KnowledgeService，
+# 后台「热更新」只重载 app 那一个，真正回答问题的两个 handler 仍在用旧库。
+_kb_singleton = None
+
+
+def get_kb() -> KnowledgeService:
+    """全进程共用一个知识库实例，保证 reload() 对回答路径生效"""
+    global _kb_singleton
+    if _kb_singleton is None:
+        _kb_singleton = KnowledgeService()
+    return _kb_singleton

@@ -2,10 +2,8 @@
 FAQ Handler — 知识库直接返回，不调用 AI
 """
 import jieba
-from services.knowledge_service import KnowledgeService
+from services.knowledge_service import get_kb
 from config import MATCH_THRESHOLD
-
-_kb = None
 
 # 话题关键词映射
 TOPIC_EXTRACT = {
@@ -31,10 +29,7 @@ def _scene_mismatch(user_msg: str, faq_question: str) -> bool:
 
 
 def _get_kb():
-    global _kb
-    if _kb is None:
-        _kb = KnowledgeService()
-    return _kb
+    return get_kb()
 
 
 def handle(message: str, session: dict, client_ip: str = "") -> dict:

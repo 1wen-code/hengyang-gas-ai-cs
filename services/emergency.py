@@ -37,16 +37,34 @@ LEVEL2_KEYWORDS = [
     "臭臭", "怪味", "糊味", "烧焦",
     "厨房有味道", "有怪味", "有异味",
     "冒烟", "浓烟", "冒火",
+    "臭鸡蛋", "臭鸡蛋味", "像臭鸡蛋",
+    # 与 detectors.DANGER_PATTERNS 对齐：漏气现场的口语化复述
+    "还有味道", "还是有味道", "还有味儿", "味还没散", "味道还在", "还有味",
 ]
 
 LEVEL3_KEYWORDS = [
-    "爆炸", "爆燃", "炸了", "着火", "起火", "火灾", "明火",
+    "爆炸", "爆燃", "炸了", r"(?<!不)着火", "起火", "火灾", "明火",
     "大量泄漏", "一直漏气", "严重漏气", "管道破裂", "管道裂了",
     "阀门关不上", "漏气止不住", "管子破了",
     "昏迷", "没有呼吸", "心跳停止", "中毒严重", "人不行了",
     "烧伤", "烫伤严重", "有人受伤",
     "中毒", "一氧化碳",
 ]
+
+# 强危险信号：即使命中 SAFE_CONTEXTS 也不得降级。
+# 与 detectors.STRONG_DANGER 保持一致，避免两个模块判定分歧。
+STRONG_DANGER = [
+    "漏气", "泄漏", "爆炸", "爆燃", "炸了", r"(?<!不)着火", "起火",
+    "煤气味", "燃气味", "臭鸡蛋", "明火", "火灾",
+    "中毒", "一氧化碳", "昏迷", "烧伤", "砰", "轰",
+    "管道破裂", "管道裂了", "阀门关不上", "大量泄漏", "严重漏气",
+]
+
+
+def _match(patterns: list, question: str) -> list:
+    """按正则匹配关键词，返回可读的命中词（去掉零宽断言）"""
+    return [p.replace("(?<!不)", "") for p in patterns if re.search(p, question)]
+
 
 LEVEL2_REPLY = """检测到可能存在燃气安全风险。
 
@@ -77,22 +95,27 @@ def _is_safe_context(question: str) -> bool:
 
 
 def detect_emergency(question: str) -> dict:
-    if _is_safe_context(question):
+    matched_3 = _match(LEVEL3_KEYWORDS, question)
+    matched_2 = _match(LEVEL2_KEYWORDS, question)
+    strong = _match(STRONG_DANGER, question)
+
+    # 安全语境只能降级「没有强危险信号」的故障咨询。
+    # 否则「我家燃气泄漏了，火都打不着」会被"打不着"整句降成普通咨询。
+    if _is_safe_context(question) and not strong:
         return {"level": 1, "is_emergency": False, "risk_label": "普通",
                 "matched": [], "reply": "", "reason": "安全语境（故障咨询）", "action": "正常回答"}
 
-    matched_3 = [kw for kw in LEVEL3_KEYWORDS if kw in question]
     if matched_3:
         return {"level": 3, "is_emergency": True, "risk_label": "高危",
                 "matched": matched_3, "reply": LEVEL3_REPLY,
                 "reason": f"命中高危关键词: {', '.join(matched_3)}",
                 "action": "红色警报 + 自动工单 + 强制转人工"}
 
-    matched_2 = [kw for kw in LEVEL2_KEYWORDS if kw in question]
-    if matched_2:
+    if matched_2 or strong:
+        hit = matched_2 or strong
         return {"level": 2, "is_emergency": True, "risk_label": "疑似风险",
-                "matched": matched_2, "reply": LEVEL2_REPLY,
-                "reason": f"命中疑似关键词: {', '.join(matched_2)}",
+                "matched": hit, "reply": LEVEL2_REPLY,
+                "reason": f"命中疑似关键词: {', '.join(hit)}",
                 "action": "黄色提醒 + 安全建议 + 推荐人工"}
 
     return {"level": 1, "is_emergency": False, "risk_label": "普通",
