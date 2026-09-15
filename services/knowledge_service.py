@@ -64,8 +64,13 @@ class KnowledgeService:
         self._build_index()
         print(f"[KB] FAQ: {len(self._faq_df)}条 | Policy: {len(self._policy_df)}条 | Tags: {len(self._tag_system['tags'])}类")
 
+    def reload(self):
+        """热重载知识库（后台「重载」按钮 / 上传新库后调用）"""
+        self._load()
+
     def _build_index(self):
         """构建关键词倒排索引"""
+        self._keyword_index = {}  # 重置，保证可重复调用
         for idx, row in self._faq_df.iterrows():
             text = str(row.get("用户问题", "")) + " " + str(row.get("关键词", ""))
             words = set(jieba.lcut(text))
